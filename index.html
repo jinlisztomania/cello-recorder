@@ -234,6 +234,8 @@ details.more[open]>summary{margin-bottom:8px}
 .accctl{display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--muted)}
 .accctl b{font-family:var(--f-mono);color:var(--ink);font-weight:500;min-width:7.5em;text-align:center}
 .credit{font-size:.78rem}
+.ver{margin:4px 0 0;text-align:center;font-size:.75rem;color:var(--muted)}
+.ver b{font-family:var(--f-mono);font-weight:500}
 .paper-title{display:grid;gap:1px;text-align:center;padding:2px 8px 0}
 .paper-title:empty{display:none}
 .paper-title b{font-family:Georgia,"Times New Roman",serif;font-size:1.08rem;font-weight:600;line-height:1.3}
@@ -525,6 +527,7 @@ html.stage-on, html.stage-on body{overflow:hidden}
       <li><b>아이폰</b>은 USB 전원이 부족할 수 있습니다. 소리가 끊기면 전원을 같이 꽂는 USB-C 허브를 쓰세요.</li>
     </ul>
   </details>
+  <p class="ver">앱 버전 <b>2026.10.13-1730</b> · 업데이트 후 이 숫자가 바뀌었는지로 새 버전을 확인할 수 있어요</p>
 </main>
 <div id="stage" hidden role="dialog" aria-label="연주 화면">
   <div class="st-top">
@@ -3434,7 +3437,17 @@ if (typeof self !== "undefined" && typeof self.postMessage === "function" && typ
         seg.finish();
         self.postMessage({ id: id, ok: true, events: ev });
       } else if (d.cmd === "export") {
-        var chans = Master.mixdown(sources(), d.nch, d.length, d.fs, function (f) { prog("mix", f); });
+        var srcs = sources(), pianoI = null;
+        if (d.piano) {                                  // the piano's level under the cello, measured here in one pass
+          var ps = srcs.filter(function (s, i) { return d.sources[i].role === "piano"; });
+          if (ps.length) {
+            var pm = Master.measure(ps.map(function (s) { return s.blocks; }), d.fs);
+            pianoI = pm.I;
+            var g = isFinite(pianoI) ? Math.pow(10, (d.piano.celloI + d.piano.rel - pianoI) / 20) : 0;
+            ps.forEach(function (s) { s.gain = g; });
+          }
+        }
+        var chans = Master.mixdown(srcs, d.nch, d.length, d.fs, function (f) { prog("mix", f); });
         var report = null, parts, f32Gain = null;
         if (d.fmt === "f32") {
           // the original, with only its level set: one gain so the loudest moment sits at the ceiling
@@ -3456,7 +3469,7 @@ if (typeof self !== "undefined" && typeof self.postMessage === "function" && typ
                     bl.forEach(function (b) { out.set(b, o); o += b.length; }); return out.buffer; })
                 : Master.wav(chans, d.fs, "i24");
         }
-        self.postMessage({ id: id, ok: true, parts: parts, report: report, f32Gain: f32Gain }, parts);
+        self.postMessage({ id: id, ok: true, parts: parts, report: report, f32Gain: f32Gain, pianoI: pianoI }, parts);
       }
     } catch (err) {
       self.postMessage({ id: id, ok: false, error: String(err && err.message || err) });
@@ -3985,6 +3998,8 @@ async function startRec(extra){
   S.rec = { t, pending: [], pendingLen: 0, seq: 0, bN: 0, bPk: 0, bSize: Math.round(ctx.sampleRate * BUCKET_SEC), saving: Promise.resolve() };
   await Store.putTake(t);
   S.rec.timer = setInterval(() => flush(), 2000);
+  S.rec.selLock = [$("#scoreSel").disabled, $("#scorePart").disabled];
+  $("#scoreSel").disabled = true; $("#scorePart").disabled = true;
   lockScreen();
   $("#releaseBtn").disabled = true; $("#devSel").disabled = true; $("#connectBtn").disabled = true;
   return t;
@@ -4022,6 +4037,7 @@ function flush(rr){
 async function stopRec(){
   const r = S.rec; if (!r) return null;
   clearInterval(r.timer);
+  if (r.selLock) { $("#scoreSel").disabled = r.selLock[0]; $("#scorePart").disabled = r.selLock[1]; }
   const t = r.t;
   if (r.bN) t.wave.push(r.bPk);
   t.status = "done";
@@ -4095,11 +4111,11 @@ async function prepareTake(t, trim){
     const d = await DSP.call({ cmd: "prepare", fs: t.sr, trim: trim || null, blocks: blocks.map(b => b.buffer) }, blocks.map(b => b.buffer),
       (st, f) => setStatus(t, `${STAGES[st] || st} ${Math.round(f * 100)}%`));
     let tr = { start: d.trim.start, end: d.trim.end };
-    if (t.acc && !trim) {           // keep the piano's whole part: from just before it starts to after it ends
-      const a = accAt(t);
-      tr = { start: Math.max(0, Math.round((a - 0.4) * t.sr)), end: Math.min(t.frames, Math.max(d.trim.end, Math.round((a + t.acc.end + 1.2) * t.sr))) };
+    if (t.acc && !trim && accAt(t) < t.frames / t.sr - 0.5) {   // keep the piano's whole part: from just before it starts to after it ends
+      const a = accAt(t), st = Math.max(0, Math.min(t.frames - 1, Math.round((a - 0.4) * t.sr)));
+      tr = { start: st, end: Math.max(st + 1, Math.min(t.frames, Math.max(d.trim.end, Math.round((a + t.acc.end + 1.2) * t.sr)))) };
     }
-    if (trim || !t.userTrim) { t.trim = tr; t.analysis = d.analysis; }
+    if (trim || !t.userTrim) { t.trim = tr; t.analysis = d.analysis; t.celloI = d.analysis ? d.analysis.I : undefined; }
     if (!trim) t.autoTrim = tr;
     saveSoon(t);
   })();
@@ -4126,7 +4142,7 @@ async function quickRecToggleInner(){
   const acc = accMode();
   if (acc) {
     if (SV.practice) setPractice(false);
-    try { $("#sizeOut").textContent = "피아노 준비 중…"; await loadPiano(); }
+    try { $("#sizeOut").textContent = "피아노 준비 중…"; pianoData(); }
     catch (e) { showErr("반주를 준비하지 못했습니다: " + (e && e.message || e)); return; }
   }
   const nm = $("#nextName").value.trim();
@@ -4137,11 +4153,16 @@ async function quickRecToggleInner(){
   ensureLiveFollow(); resetFollowers();
   if (acc) {
     // the piano starts after one bar of count-in; the piece's end stops the recording by itself
-    const plan = currentPlan();
-    const run = await startAccomp(plan, () => { if (S.rec && S.rec.t === t) quickRecToggle(); });
-    t.acc = { scoreId: SV.rec.id, scoreName: SV.rec.name, inst: SV.inst, start: SV.start, speed: SV.rec.speed || 1,
-              Tz: run.T0, L: latencyMs().ms / 1000, events: plan.events, tmap: plan.tmap, end: plan.end, startTs: plan.startTs };
-    t.accMix = true; t.accVol = -4;
+    try {
+      const plan = currentPlan(), owner = { scoreId: SV.rec.id, inst: SV.inst };
+      const run = await startAccomp(plan, () => { if (S.recBusy) return false; if (S.rec && S.rec.t === t) quickRecToggle(); }, owner);
+      if (!run) throw new Error("반주가 시작되지 않았습니다");
+      if (S.rec && S.rec.t === t) {
+        t.acc = { scoreId: owner.scoreId, scoreName: SV.rec.name, inst: owner.inst, start: SV.start, speed: SV.rec.speed || 1,
+                  Tz: run.T0, L: latencyMs().ms / 1000, events: plan.events, tmap: plan.tmap, end: plan.end, startTs: plan.startTs };
+        t.accMix = true; t.accVol = -4;
+      } else stopAccomp();
+    } catch (e) { stopAccomp(); showErr("피아노 반주를 시작하지 못했습니다. 첼로만 녹음됩니다: " + (e && e.message || e)); }
   }
   $("#recBtn").classList.add("on"); $("#recBtn").setAttribute("aria-label", "녹음 정지");
 }
@@ -4345,15 +4366,14 @@ async function takeSources(t){
   const blocks = await Store.getBlocks(t.id), transfer = blocks.map(b => b.buffer);
   const sources = [{ blocks: blocks.map(b => b.buffer), sr: t.sr, start: t.trim.start, end: t.trim.end, at: 0, gain: 1, pan: 0 }];
   let nch = 1;
-  if (t.acc && t.accMix !== false) {
-    const p = await takePiano(t), g = toLin(await pianoGainDb(t));
-    for (const [c, pan] of [[0, -1], [1, 1]]) {
-      const d = p.getChannelData(c).slice(); transfer.push(d.buffer);
-      sources.push({ blocks: [d.buffer], sr: t.sr, start: t.trim.start, end: t.trim.end, at: 0, gain: g, pan });
-    }
+  let piano = null;
+  if (t.acc && t.accMix !== false && accAt(t) < t.trim.end / t.sr) {
+    const p = await takePiano(t), len = t.trim.end - t.trim.start;
+    p.forEach((d, c) => { transfer.push(d.buffer); sources.push({ blocks: [d.buffer], sr: t.sr, start: 0, end: len, at: 0, gain: 1, pan: c ? 1 : -1, role: "piano" }); });
+    piano = { celloI: celloLoud(t) - 3.0103, rel: t.accVol ?? -4 };
     nch = 2;
   }
-  return { sources, transfer, nch };
+  return { sources, transfer, nch, piano };
 }
 async function makeQuickFile(t){
   const el = S.els.get(t.id); if (!el || t._making) return;
@@ -4362,15 +4382,17 @@ async function makeQuickFile(t){
   const key = () => JSON.stringify([t.fmt, t.target, t.peakMode, t.phone, t.trim, t.accMix, t.accVol]), want = key();
   let failed = false;
   try {
+    if (t._preparing) await t._preparing.catch(() => {});        // the cello's loudness sets the piano's level
     if (t.fmt === "mp3" && ![32000, 44100, 48000].includes(t.sr)) throw new Error("MP3는 48 kHz 이하에서만 만들 수 있습니다. 32-bit float 원본으로 내보내세요.");
     const len = t.trim.end - t.trim.start;
     if (t.acc && t.accMix !== false) setStatus(t, "피아노 반주 합치는 중…");
     const src = await takeSources(t);
-    const d = await DSP.call({ cmd: "export", fmt: t.fmt, nch: src.nch, fs: t.sr, length: len, sources: src.sources,
+    const d = await DSP.call({ cmd: "export", fmt: t.fmt, nch: src.nch, fs: t.sr, length: len, sources: src.sources, piano: src.piano,
       opts: { target: t.target, ceiling: CEILING, maxLimit: +t.peakMode, kbps: 320, lift: t.phone === "on", peakTo: CEILING } }, src.transfer,
       (st, f) => setStatus(t, `${STAGES[st] || st} ${Math.round(f * 100)}%`));
     if (want !== key() || !S.byId.has(t.id)) { setStatus(t, ""); return; }   // settings changed meanwhile
-    if (d.report) { t.analysis = d.report.analysis; saveSoon(t); }
+    if (d.report && !src.piano) { t.analysis = d.report.analysis; saveSoon(t); }   // (a mix is not the cello's own analysis)
+    if (isFinite(d.pianoI)) { t._pianoI = d.pianoI; t.pianoI = d.pianoI; saveSoon(t); }
     setStatus(t, d.report ? "공유 준비 완료" : `원본 음질 그대로 · 게인만 ${fmtDb(d.f32Gain || 0)} dB (가장 큰 소리 −1 dBFS)`);
     const ext = t.fmt === "mp3" ? ".mp3" : "_32f원본.wav";
     t._file = new File(d.parts, safeName(t.name) + ext, { type: t.fmt === "mp3" ? "audio/mpeg" : "audio/wav" });
@@ -4428,7 +4450,7 @@ async function updateStoreLine(){
 }
 
 /* ===================== playback ===================== */
-const BUF_BUDGET = 320e6;               // bytes of decoded audio kept for instant replay
+const BUF_BUDGET = 192e6;               // bytes of decoded audio kept for instant replay (an iPhone tab has ~1.5 GB in all)
 function cacheBuffer(id, buf){
   S.bufCache.delete(id); S.bufCache.set(id, buf);
   const keep = new Set(S.song ? S.song.parts.map(p => p.best) : []);
@@ -4481,15 +4503,16 @@ async function playTake(t, fromSec){
   const btn = el._q(".play"); btn.textContent = "불러오는 중…";
   let buf; try { buf = await takeBuffer(t); } catch (e) { btn.textContent = "재생"; showErr("재생할 수 없습니다: " + e.message); return; }
   if (tok !== S.playTok || S.rec) { btn.textContent = "재생"; return; }
-  const clips = [{ buf, at: 0, s: 0, e: buf.length, gain: toLin(playGainDb(t) - (t.acc ? 2 : 0)), pan: 0 }];
-  if (t.acc && t.accMix !== false) {
-    try { await loadPiano(); } catch (e) { showErr("피아노 반주를 불러오지 못했습니다: " + (e && e.message || e)); }
+  const withPiano = !!(t.acc && t.accMix !== false);
+  const clips = [{ buf, at: 0, s: 0, e: buf.length, gain: toLin(playGainDb(t) - (withPiano ? 2 : 0)), pan: 0 }];
+  if (withPiano) {
+    try { await loadPiano(t.acc.events); } catch (e) { showErr("피아노 반주를 불러오지 못했습니다: " + (e && e.message || e)); }
     if (tok !== S.playTok || S.rec) { btn.textContent = "재생"; return; }
   }
   const Tz = ctx.currentTime + 0.05 - fromSec;
   const nodes = scheduleClips(clips, Tz, fromSec);
   // the piano plays live under the take (no waiting for a rendering), at the level the file will have
-  if (t.acc && t.accMix !== false && ACC.bufs) {
+  if (withPiano && ACC.roots) {
     const lp = livePiano(t.acc.events, Tz + accAt(t), fromSec - accAt(t), toLin(playGainDb(t) - 2 + pianoGainNow(t)));
     nodes.push({ stop: () => lp.stop() });
   }
@@ -5033,9 +5056,10 @@ async function makeBackup(){
       let base = safeName(r.name).slice(0, 60) || "score", fname = `악보/${base}${ext}`, k = 2;
       while (used.has(fname)) fname = `악보/${base} (${k++})${ext}`;
       used.add(fname); entries.push({ name: fname, parts: [u8] });
-      scores.push({ id: r.id, name: r.name, created: r.created, inst: r.inst, start: r.start, file: fname });
+      scores.push({ id: r.id, name: r.name, created: r.created, inst: r.inst, start: r.start, acc: r.acc, speed: r.speed, bpm: r.bpm, file: fname });
     }
-    const meta = { app: "nt1-float-recorder", v: 1, exported: Date.now(), files, takes, songs: JSON.parse(JSON.stringify(S.songs)), scores };
+    const lib = {}; for (const x of LIB) { const v = lsGet("nt1-lib-" + x.id, null); if (v) lib[x.id] = v; }      // built-in scores' settings
+    const meta = { app: "nt1-float-recorder", v: 1, exported: Date.now(), files, takes, songs: JSON.parse(JSON.stringify(S.songs)), scores, lib };
     entries.unshift({ name: "meta.json", parts: [new TextEncoder().encode(JSON.stringify(meta))] });
     $("#bkStatus").textContent = "zip 만드는 중…";
     await new Promise(r => setTimeout(r, 30));
@@ -5117,10 +5141,11 @@ async function restoreBackup(file){
       }
       if (changed) await Store.putSong(ex);
     }
+    for (const [id, v] of Object.entries(meta.lib || {})) { const r = LIB.find(x => x.id === id); if (r && !lsGet("nt1-lib-" + id, null)) { lsSet("nt1-lib-" + id, v); Object.assign(r, v); } }
     for (const sc of meta.scores || []) {
       const e = idx.get(sc.file); if (!e || e.method !== 0 || S.scores.find(x => x.id === sc.id)) continue;
       const data = await file.slice(e.data, e.data + e.size).arrayBuffer();
-      await Store.putScore({ id: sc.id, name: sc.name, created: sc.created, inst: sc.inst, start: sc.start || 0, data });
+      await Store.putScore({ id: sc.id, name: sc.name, created: sc.created, inst: sc.inst, start: sc.start || 0, acc: sc.acc, speed: sc.speed, bpm: sc.bpm, data });
     }
     $("#bkStatus").textContent = `녹음 ${added}개${songs ? ` · 곡 ${songs}개` : ""} 불러옴${skipped ? ` · 이미 있는 ${skipped}개는 건너뜀` : ""} · 다시 여는 중…`;
     setTimeout(() => location.reload(), 900);
@@ -5387,7 +5412,7 @@ async function placeScore(){
 async function openScore(rec, inst){
   const tok = ++SV.tok;
   // another score: marks and the live follower belonged to the old one (it restarts once the new one is ready)
-  if ((SV.rec && SV.rec.id) !== (rec && rec.id)) { stopLiveFollow(); clearMarks(); SV.takeMap = null; }
+  if ((SV.rec && SV.rec.id) !== (rec && rec.id)) { if (SV.practice) setPractice(false); stopLiveFollow(); clearMarks(); SV.takeMap = null; SV.extras = null; }
   SV.rec = rec; SV.ready = false; renderScoreSelect(); scoreCtxUI();
   if (!rec) { SV.steps = []; SV.attack = []; if (SV.practice) setPractice(false); stopLiveFollow(); if (SV.ctx === "song") renderSong(); return; }
   const key = rec.id;
@@ -5406,6 +5431,11 @@ async function openScore(rec, inst){
       const p = SV.loading = SV.osmd.load(new Blob([rec.data]));
       try { await p; dedupeTempo(SV.osmd); SV.loadedKey = key; } finally { if (SV.loading === p) SV.loading = null; }
       if (tok !== SV.tok) return;
+    }
+    if (!SV.extras || SV.extras.id !== key) {          // pedal and cresc./dim. for the piano (unpacking a .mxl if need be)
+      const ex = scoreExtras(await scoreText(rec.data));
+      if (tok !== SV.tok) return;
+      SV.extras = { id: key, ex };
     }
     const names = SV.osmd.Sheet.Instruments.map(i => i.Name || "파트");
     let i = inst;
@@ -5435,6 +5465,39 @@ function dedupeTempo(o){
       if (keep.length < list.length) list.splice(0, list.length, ...keep);       // (a read-only property: change the list itself)
     }
   } catch (e) {}
+}
+async function scoreText(data){
+  try {
+    const u8 = typeof data === "string" ? null : new Uint8Array(data);
+    if (!u8) return data;
+    if (!(u8[0] === 0x50 && u8[1] === 0x4b)) return new TextDecoder().decode(u8);
+    if (typeof DecompressionStream === "undefined") return null;
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength), files = [];
+    let o = 0;
+    while (o + 30 <= u8.length && dv.getUint32(o, true) === 0x04034b50) {           // local file headers
+      const flags = dv.getUint16(o + 6, true), method = dv.getUint16(o + 8, true);
+      let csize = dv.getUint32(o + 18, true); const nlen = dv.getUint16(o + 26, true), xlen = dv.getUint16(o + 28, true);
+      const name = new TextDecoder().decode(u8.subarray(o + 30, o + 30 + nlen)), at = o + 30 + nlen + xlen;
+      if (flags & 8) {                                                                  // sizes only in the central directory
+        let c = u8.length - 22; while (c > 0 && dv.getUint32(c, true) !== 0x06054b50) c--;
+        let cd = dv.getUint32(c + 16, true);
+        while (cd < c && dv.getUint32(cd, true) === 0x02014b50) {
+          const cn = dv.getUint16(cd + 28, true), ce = dv.getUint16(cd + 30, true), cc = dv.getUint16(cd + 32, true);
+          if (new TextDecoder().decode(u8.subarray(cd + 46, cd + 46 + cn)) === name) { csize = dv.getUint32(cd + 20, true); break; }
+          cd += 46 + cn + ce + cc;
+        }
+      }
+      files.push({ name, method, data: u8.subarray(at, at + csize) });
+      o = at + csize + (flags & 8 ? 16 : 0);
+    }
+    const read = async f => f.method === 0 ? new TextDecoder().decode(f.data)
+      : await new Response(new Blob([f.data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).text();
+    const cont = files.find(f => /container\.xml$/i.test(f.name));
+    let main = null;
+    if (cont) { const m = /full-path="([^"]+)"/.exec(await read(cont)); if (m) main = files.find(f => f.name === m[1]); }
+    main = main || files.find(f => /\.(musicxml|xml)$/i.test(f.name) && !/^META-INF/i.test(f.name));
+    return main ? await read(main) : null;
+  } catch (e) { return null; }
 }
 function setInst(i){
   const o = SV.osmd; if (!o) return;
@@ -5494,9 +5557,9 @@ function gotoStep(i, force){
     const top = el.offsetTop, h = el.offsetHeight || 80;
     if (top < box.scrollTop + 8 || top + h > box.scrollTop + box.clientHeight - 8) box.scrollTo({ top: Math.max(0, top - box.clientHeight * 0.22), behavior: "smooth" });
   }
-  const s = SV.steps[i];
-  $("#scorePos").textContent = `${barName(s.m)}${s.midis.length ? " · " + s.midis.map(Pitch.name).join("+") : ""}`;
+  $("#scorePos").textContent = posLabel(i);
 }
+function posLabel(i){ const s = SV.steps[i]; return s ? `${barName(s.m)}${s.midis.length ? " · " + s.midis.map(Pitch.name).join("+") : ""}` : ""; }
 function updateStartLbl(){ if (SV.meta) $("#startLbl").textContent = barName(SV.start); }
 function startAttackIndex(attack, start){ attack = attack || SV.attack; start = start ?? SV.start; const k = attack.findIndex(a => a.m >= start); return k < 0 ? 0 : k; }
 
@@ -5649,16 +5712,18 @@ function computeDeviation(f){
 /* ---- following by sound (quick tab) ---- */
 /* practice: the score follows and marks the playing, nothing is recorded */
 async function setPractice(on){
+  const my = SV.pracGen = (SV.pracGen || 0) + 1;            // a later tap (on or off) wins over one still starting
   if (on) {
     if (S.rec || !SV.rec || SV.ctx !== "quick") return;
-    if (!(await ensureInput())) return;
-    SV.practice = true; lockScreen("practice");
+    if (!(await ensureInput()) || my !== SV.pracGen) return;
+    SV.practice = true; lockScreen("practice"); stopPlay();
     gotoStep(firstStepOfMeasure(SV.start), true);
     ensureLiveFollow(); resetFollowers();
     if (accMode()) {
       scoreCtxUI(); $("#scoreHint").textContent = "피아노 준비 중…";
-      try { await startAccomp(currentPlan(), () => setPractice(false)); }
+      try { await startAccomp(currentPlan(), () => setPractice(false), { scoreId: SV.rec.id, inst: SV.inst }); }
       catch (e) { showErr("반주를 시작하지 못했습니다: " + (e && e.message || e)); return setPractice(false); }
+      if ((my !== SV.pracGen || !SV.practice) && ACC.run && !S.rec) stopAccomp();   // stopped again while the piano was loading
     }
   } else { SV.practice = false; if (ACC.run && !S.rec) stopAccomp(); unlockScreen("practice"); ensureLiveFollow(); }
   scoreCtxUI();
@@ -5666,12 +5731,12 @@ async function setPractice(on){
 /* accompaniment: available when the score has other parts; chosen per score */
 function accMode(){ return SV.ctx === "quick" && !!SV.rec && SV.ready && SV.hasAcc && !!SV.rec.acc; }
 function startBpm(){ return SV.osmd ? measureBpms(SV.osmd.Sheet, SV.rec && SV.rec.bpm)[SV.start] || 80 : 80; }
-function currentPlan(){ return accompPlan(SV.osmd, SV.inst, SV.start, SV.rec.speed || 1, SV.rec.bpm, SV.rec.data); }
+function currentPlan(){ return accompPlan(SV.osmd, SV.inst, SV.start, SV.rec.speed || 1, SV.rec.bpm, SV.extras && SV.extras.id === SV.rec.id ? SV.extras.ex : null); }
 function setAccMode(on){
   if (!SV.rec || S.rec) return;
   if (SV.practice) setPractice(false);
   SV.rec.acc = !!on; saveScoreRec(SV.rec);
-  if (on) loadPiano().catch(e => showErr("피아노 음원을 불러오지 못했습니다: " + (e && e.message || e)));
+  if (on) { try { loadPiano(currentPlan().events).catch(e => showErr("피아노 음원을 불러오지 못했습니다: " + (e && e.message || e))); } catch (e) {} }
   scoreCtxUI();
 }
 function setSpeed(d){
@@ -5682,8 +5747,16 @@ function setSpeed(d){
 const TFNS = new WeakMap();
 function tfns(tmap){ let f = TFNS.get(tmap); if (!f) { f = timeFns(tmap); TFNS.set(tmap, f); } return f; }
 function accClock(){
+  // asked several times per frame (cursor, performance view, count): worked out once per audio tick
+  const now = S.ctx ? S.ctx.currentTime : -1, k = ACC.run || S.player;
+  if (SV.clkMemo && SV.clkMemo.now === now && SV.clkMemo.k === k && SV.clkMemo.rec === SV.rec && SV.clkMemo.inst === SV.inst) return SV.clkMemo.v;
+  const v = accClock1();
+  SV.clkMemo = { now, k, rec: SV.rec, inst: SV.inst, v };
+  return v;
+}
+function accClock1(){
   if (SV.ctx !== "quick" || !SV.rec) return null;
-  if (ACC.run) return { tmap: ACC.run.plan.tmap, t: accNow(), startTs: ACC.run.plan.startTs, ci: ACC.run.plan.countIn };
+  if (ACC.run) return ACC.run.scoreId === SV.rec.id && ACC.run.inst === SV.inst ? { tmap: ACC.run.plan.tmap, t: accNow(), startTs: ACC.run.plan.startTs, ci: ACC.run.plan.countIn } : null;
   const p = S.player; if (!p || !p.takeId || !S.ctx) return null;
   const tk = S.byId.get(p.takeId);
   if (!tk || !tk.acc || tk.acc.scoreId !== SV.rec.id || tk.acc.inst !== SV.inst) return null;
@@ -5794,8 +5867,11 @@ function scoreTick(){
   updateTuner();
   const clk = accClock();
   if (clk) {
-    gotoStep(Math.max(firstStepOfMeasure(SV.start), stepAtTs(SV.steps, clockTs(clk))));
-    if (clk.ci && clk.t < clk.ci.downAt) $("#scorePos").textContent = `준비 ${Math.max(1, Math.ceil((clk.ci.downAt - clk.t) / clk.ci.beatSec))}`;
+    if (SV.startStepFor !== SV.start + ":" + SV.steps.length) { SV.startStepFor = SV.start + ":" + SV.steps.length; SV.startStep = firstStepOfMeasure(SV.start); }
+    gotoStep(Math.max(SV.startStep, stepAtTs(SV.steps, clockTs(clk))));
+    const counting = clk.ci && clk.t < clk.ci.downAt;
+    if (counting) { setText($("#scorePos"), `준비 ${Math.max(1, Math.ceil((clk.ci.downAt - clk.t) / clk.ci.beatSec))}`); SV.counted = true; }
+    else if (SV.counted) { SV.counted = false; setText($("#scorePos"), posLabel(SV.idx)); }
   }
   if (S.player && S.player.takeId && SV.takeMap && SV.takeMap.takeId === S.player.takeId && SV.takeMap.attack === SV.attack) {
     const tm = SV.takeMap, pos = S.ctx.currentTime - S.player.Tz, m = tm.map;
@@ -5844,7 +5920,8 @@ function initScore(){
   $("#scoreFile").addEventListener("change", e => { importScore(e.target.files[0]); e.target.value = ""; });
   $("#scoreSel").addEventListener("change", e => selectScoreHere(e.target.value || null));
   $("#scorePart").addEventListener("change", e => {
-    const i = +e.target.value; SV.busy = true; setInst(i); SV.busy = false;
+    const i = +e.target.value;
+    if (SV.practice) setPractice(false); SV.busy = true; setInst(i); SV.busy = false;
     if (SV.ctx === "song" && S.song) { S.song.scoreInst = i; saveSong(S.song); }
     else if (SV.rec) { SV.rec.inst = i; saveScoreRec(SV.rec); }
   });
@@ -6260,11 +6337,11 @@ async function quickVideoJob(t, withMarks, onStage){
   const sc = scoreSnapshot();
   if (t.acc && (t.acc.scoreId !== sc.rec.id || t.acc.inst !== sc.inst)) throw new Error(`이 녹음은 ‘${t.acc.scoreName || "다른 악보"}’ 반주에 맞춰 녹음했어요. 그 악보와 파트를 연 뒤 만드세요.`);
   onStage("악보 위치 찾는 중…");
-  const tm = await takeScoreMap(t, true, sc);
+  const tm = t.acc && !withMarks ? null : await takeScoreMap(t, true, sc);     // (an accompanied take is placed by its clock)
   if (!t.acc && (!tm || !tm.map.length)) throw new Error("이 녹음에서 악보와 맞는 음을 찾지 못했습니다. 다른 악보 파트를 골랐는지 확인하세요.");
   if (t.acc && t.accMix !== false) onStage("피아노 반주 합치는 중…");
   const src = await takeSources(t);
-  const a = await mastered({ nch: src.nch, fs: t.sr, length: t.trim.end - t.trim.start, sources: src.sources,
+  const a = await mastered({ nch: src.nch, fs: t.sr, length: t.trim.end - t.trim.start, sources: src.sources, piano: src.piano,
     opts: { target: t.target, ceiling: CEILING, maxLimit: +t.peakMode, lift: t.phone === "on" } }, src.transfer, onStage);
   onStage("악보 그리는 중…");
   const s = await buildStrip(sc.data, [sc.inst]);
@@ -6373,28 +6450,41 @@ function refreshVideoUI(){
    by Alexander Holm (CC BY 3.0), two velocity layers, a sample every minor third.
    In this mode the cellist follows the piano, so the cursor runs on the accompaniment's clock;
    the pitch follower still listens, but only for the wrong-note and intonation marks. */
-const ACC = { bufs: null, roots: null, loading: null, run: null, irs: new Map() };
+const ACC = { data: null, roots: null, bufs: new Map(), chain: Promise.resolve(), run: null, gen: 0, irs: new Map() };
 
-/* ---- the samples: decoded once, on first use (about 1 s on a phone) ---- */
-async function loadPiano(){
-  if (ACC.bufs) return ACC.bufs;
-  if (ACC.loading) return ACC.loading;
-  ACC.loading = (async () => {
-    const el = document.getElementById("pianoSrc");
-    const data = el ? JSON.parse(el.textContent) : null;
-    if (!data || !Object.keys(data).length) throw new Error("피아노 음원이 들어 있지 않은 버전입니다");
-    const ctx = ensureCtx(), bufs = new Map();
-    await Promise.all(Object.entries(data).map(async ([k, b64]) => {
-      const bin = atob(b64), u8 = new Uint8Array(bin.length);
+/* ---- the samples: the base64 text is read once (and dropped from the page); each sample is decoded the first
+   time a piece needs it, so memory holds only the notes in use (a whole set is ~120 MB decoded) ---- */
+function pianoData(){
+  if (ACC.data) return ACC.data;
+  const el = document.getElementById("pianoSrc");
+  const data = el && el.textContent.trim() ? JSON.parse(el.textContent) : null;
+  if (!data || !Object.keys(data).length) throw new Error("피아노 음원이 들어 있지 않은 버전입니다");
+  if (el) el.textContent = "";
+  ACC.data = data;
+  ACC.roots = [...new Set(Object.keys(data).map(k => +k.split("_")[0]))].sort((a, b) => a - b);
+  return data;
+}
+function rootOf(midi){ let root = ACC.roots[0]; for (const r of ACC.roots) if (Math.abs(r - midi) < Math.abs(root - midi)) root = r; return root; }
+function keyOf(midi, vel){
+  const root = rootOf(midi), layer = vel < 0.55 ? 6 : 12;
+  return ACC.data[root + "_" + layer] ? root + "_" + layer : root + "_" + (layer === 6 ? 12 : 6);
+}
+/* make sure the samples for these events are decoded (all of them when no events are given) */
+function loadPiano(events){
+  const job = ACC.chain.then(async () => {
+    const data = pianoData(), ctx = ensureCtx();
+    const want = new Set(events ? events.map(e => keyOf(e[2], e[3])) : Object.keys(data));
+    const todo = [...want].filter(k => data[k] && !ACC.bufs.has(k));
+    await Promise.all(todo.map(async k => {
+      const bin = atob(data[k]), u8 = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
       const buf = await new Promise((res, rej) => { const p = ctx.decodeAudioData(u8.buffer, res, rej); if (p && p.catch) p.catch(rej); });
-      bufs.set(k, { buf, off: onsetOf(buf) });
+      ACC.bufs.set(k, { buf, off: onsetOf(buf) });
     }));
-    ACC.roots = [...new Set([...bufs.keys()].map(k => +k.split("_")[0]))].sort((a, b) => a - b);
-    ACC.bufs = bufs;
-    return bufs;
-  })();
-  try { return await ACC.loading; } finally { ACC.loading = null; }
+    return ACC.bufs;
+  });
+  ACC.chain = job.catch(() => {});
+  return job;
 }
 /* where the hammer hits (MP3 adds a little silence in front; every sample is cut the same way) */
 function onsetOf(buf){
@@ -6424,19 +6514,21 @@ function pianoChain(ctx, dest){
   return inp;
 }
 /* one note: the nearest sample, re-pitched; the softer layer below mezzo-forte */
-function pianoNote(ctx, out, midi, vel, when, dur){
-  const roots = ACC.roots; if (!roots) return;
-  let root = roots[0]; for (const r of roots) if (Math.abs(r - midi) < Math.abs(root - midi)) root = r;
-  const layer = vel < 0.55 ? 6 : 12, s = ACC.bufs.get(root + "_" + layer) || ACC.bufs.get(root + "_" + (layer === 6 ? 12 : 6)); if (!s) return;
+/* skip: the note began this long ago (playback started in the middle of it) */
+function pianoNote(ctx, out, midi, vel, when, dur, skip){
+  if (!ACC.roots) return;
+  const key = keyOf(midi, vel), s = ACC.bufs.get(key); if (!s) return;
+  const root = +key.split("_")[0], layer = +key.split("_")[1], sk = Math.max(0, skip || 0);
   const rate = Math.pow(2, (midi - root) / 12), src = ctx.createBufferSource(), g = ctx.createGain();
   src.buffer = s.buf; src.playbackRate.value = rate;
   const lvl = 0.42 * (layer === 6 ? Math.min(1.6, vel / 0.42) : Math.min(1.3, vel / 0.8));
-  const end = when + Math.max(0.09, dur);
+  const end = when + Math.max(0.09, dur - sk), offset = s.off + sk * rate;
+  if (offset >= s.buf.duration - 0.05) return;
   g.gain.setValueAtTime(lvl, when);
   g.gain.setTargetAtTime(0, end, 0.085);                   // the damper falls
   src.connect(g); g.connect(out);
-  src.start(when, s.off);
-  src.stop(Math.min(end + 0.7, when + (s.buf.duration - s.off) / rate));
+  src.start(when, offset);
+  src.stop(Math.min(end + 0.7, when + (s.buf.duration - offset) / rate));
 }
 
 /* ---- the score as time ---- */
@@ -6453,9 +6545,13 @@ const DYN_VEL = { pppppp: 0.12, ppppp: 0.14, fffff: 1, ffffff: 1, sff: 0.9, sfp:
 /* each measure's tempo (♩ per minute): the score's own marks. A score without any gets the fallback —
    OSMD would otherwise report 120 for every bar, far too fast for most of what a cellist plays. */
 function measureBpms(sh, fallback){
-  const out = [];
+  const out = [], sm = sh.SourceMeasures;
+  // bars before the first written tempo take that tempo (OSMD reports 120 for them)
+  const explicit = m => (m.TempoExpressions || []).some(x => x.InstantaneousTempo && x.InstantaneousTempo.TempoInBpm > 0);
+  const first = sm.findIndex(explicit);
   let bpm = sh.HasBPMInfo && sh.DefaultStartTempoInBpm > 0 ? sh.DefaultStartTempoInBpm : (fallback || 80);
-  for (const m of sh.SourceMeasures) { if (sh.HasBPMInfo && m.TempoInBPM > 0) bpm = m.TempoInBPM; out.push(bpm); }
+  if (sh.HasBPMInfo && first > 0 && sm[first].TempoInBPM > 0) bpm = sm[first].TempoInBPM;
+  sm.forEach((m, i) => { if (sh.HasBPMInfo && m.TempoInBPM > 0 && (first < 0 || i >= first)) bpm = m.TempoInBPM; out.push(bpm); });
   return out;
 }
 function tempoWords(m){
@@ -6463,10 +6559,9 @@ function tempoWords(m){
 }
 /* what OSMD does not hand over, read straight from the MusicXML: the sustain pedal and cresc./dim. (words or
    hairpins), per part, as [measure index, whole notes into the measure, kind] */
-function scoreExtras(data){
+function scoreExtras(txt){
   try {
-    const txt = typeof data === "string" ? data : new TextDecoder().decode(data);
-    if (!/^\s*</.test(txt)) return null;                                   // compressed .mxl: without these extras
+    if (!txt || !/^\s*</.test(txt)) return null;
     const doc = new DOMParser().parseFromString(txt, "application/xml");
     if (doc.getElementsByTagName("parsererror").length) return null;
     const num = (el, sel) => { const x = el.querySelector(sel); return x ? +x.textContent || 0 : 0; };
@@ -6496,14 +6591,14 @@ function scoreExtras(data){
   } catch (e) { return null; }
 }
 /* everything needed to play (and later re-render) the accompaniment from a start bar, at a speed */
-function accompPlan(osmd, soloInst, startMeasure, speed, fallbackBpm, data){
+function accompPlan(osmd, soloInst, startMeasure, speed, fallbackBpm, ex){
   const sh = osmd.Sheet, sm = sh.SourceMeasures, insts = sh.Instruments;
   const bpms = measureBpms(sh, fallbackBpm), full = [], mrow = [];
   let sec = 0, ritAt = -1;
   for (let i = 0; i < sm.length; i++) {
     const m = sm[i], w = tempoWords(m), base = 240 / (bpms[i] * speed), len = m.Duration.RealValue, abs = m.AbsoluteTimestamp.RealValue;
     if (/a tempo|tempo i|tempo primo/.test(w) || (i && bpms[i] !== bpms[i - 1])) ritAt = -1;
-    if (ritAt < 0 && /rit|rall|allarg|calando/.test(w)) ritAt = i;
+    if (ritAt < 0 && /(^|[\s(])(rit\b|rit\.|ritard|riten|rall|allarg|calando)/.test(w)) ritAt = i;   // not "spirito", "ritmico"
     mrow.push(full.length);
     if (ritAt < 0) { full.push([abs, sec, base, len]); sec += len * base; continue; }
     // ritardando: slower beat by beat, to 70 % of the tempo over two bars, then held there
@@ -6528,7 +6623,7 @@ function accompPlan(osmd, soloInst, startMeasure, speed, fallbackBpm, data){
   })));
   for (const l of dyn.values()) l.sort((a, b) => a[0] - b[0]);
   // pedal (held notes ring on until it is lifted) and cresc./dim. (the loudness moves towards the next mark)
-  const ex = data ? scoreExtras(data) : null, absOf = (mi, at) => (sm[mi] ? sm[mi].AbsoluteTimestamp.RealValue : 0) + at;
+  const absOf = (mi, at) => (sm[mi] ? sm[mi].AbsoluteTimestamp.RealValue : 0) + at;
   const pedals = new Map(), ramps = new Map();
   if (ex) ex.forEach((P, ii) => {
     if (ii >= insts.length) return;
@@ -6590,50 +6685,73 @@ function accompPlan(osmd, soloInst, startMeasure, speed, fallbackBpm, data){
   return { tmap, events, end, startTs, start, countIn: { beats, beatSec, downAt: tmap[mrow[fm]][1] }, speed };
 }
 
-/* ---- live: the piano on a lookahead scheduler (only the next 0.35 s of notes exist at any time) ---- */
-function livePiano(events, T0, from, gain){
-  const ctx = S.ctx, bus = ctx.createGain(); bus.gain.value = gain == null ? 1 : gain; bus.connect(S.bus);
+/* ---- live: the piano on a lookahead scheduler. 1.2 s ahead, so a stall of the page (a score redraw on rotation)
+   does not drop notes; a note that is late anyway is played late rather than lost ---- */
+function livePiano(events, T0, from, gain, busIn){
+  const ctx = S.ctx, bus = busIn || ctx.createGain();
+  if (!busIn) { bus.gain.value = gain == null ? 1 : gain; bus.connect(S.bus); }
   const out = pianoChain(ctx, bus);
-  let i = 0; while (i < events.length && events[i][0] < from - 0.02) i++;
+  let i = 0;
+  if (from > -Infinity) {
+    // notes already ringing where playback starts: picked up mid-sound
+    for (const e of events) { if (e[0] >= from - 0.02) break; const into = from - e[0]; if (into < e[1] - 0.1) pianoNote(ctx, out, e[2], e[3], T0 + from, e[1], into); }
+    while (i < events.length && events[i][0] < from - 0.02) i++;
+  }
   const tick = () => {
-    const horizon = ctx.currentTime + 0.35;
+    const now = ctx.currentTime, horizon = now + 1.2;
     while (i < events.length) {
       const e = events[i], when = T0 + e[0];
       if (when > horizon) break;
-      if (when > ctx.currentTime - 0.03) pianoNote(ctx, out, e[2], e[3], Math.max(when, ctx.currentTime), e[1]);
+      if (when > now - 0.25) pianoNote(ctx, out, e[2], e[3], Math.max(when, now + 0.005), e[1]);
       i++;
     }
   };
-  const id = setInterval(tick, 40); tick();
-  return { bus, stop(){ clearInterval(id); try { bus.gain.setTargetAtTime(0, ctx.currentTime, 0.04); setTimeout(() => { try { bus.disconnect(); } catch (e) {} }, 400); } catch (e) {} } };
+  const id = setInterval(tick, 50); tick();
+  return { bus, stop(){ clearInterval(id); try { bus.gain.cancelScheduledValues(ctx.currentTime); bus.gain.setTargetAtTime(0, ctx.currentTime, 0.03); setTimeout(() => { try { bus.disconnect(); } catch (e) {} }, 400); } catch (e) {} } };
 }
-/* practice / recording: one bar of count-in clicks, then the piano */
-async function startAccomp(plan, onEnd){
+/* practice / recording: one bar of count-in clicks, then the piano. A newer start or a stop while this one is
+   still loading cancels it (two quick taps must never leave a piano nobody can stop). */
+async function startAccomp(plan, onEnd, owner){
   stopAccomp();
-  await loadPiano();
+  const my = ++ACC.gen;
+  await loadPiano(plan.events);
+  if (my !== ACC.gen) return null;
   const ctx = ensureCtx(); await ctx.resume();
+  if (my !== ACC.gen) return null;
   const ci = plan.countIn, Tclick = ctx.currentTime + 0.35;
   const T0 = Tclick + ci.beats * ci.beatSec - ci.downAt;           // ctx time of accompaniment time 0
-  for (let k = 0; k < ci.beats; k++) click(Tclick + k * ci.beatSec, k === 0);
-  ACC.run = { plan, T0, live: livePiano(plan.events, T0, -Infinity, 1), onEnd, ended: false };
+  const bus = ctx.createGain(); bus.connect(S.bus);
+  for (let k = 0; k < ci.beats; k++) clickTo(bus, Tclick + k * ci.beatSec, k === 0);   // stopped with the piano
+  ACC.run = { plan, T0, live: livePiano(plan.events, T0, -Infinity, 1, bus), onEnd, ended: false,
+              scoreId: owner && owner.scoreId, inst: owner && owner.inst };
   return ACC.run;
 }
+function clickTo(dest, when, accent){
+  const ctx = S.ctx, o = ctx.createOscillator(), g = ctx.createGain();
+  o.frequency.value = accent ? 1760 : 1175;
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.exponentialRampToValueAtTime(accent ? 0.7 : 0.4, when + 0.002);
+  g.gain.exponentialRampToValueAtTime(0.0001, when + 0.05);
+  o.connect(g); g.connect(dest); o.start(when); o.stop(when + 0.06);
+}
 function stopAccomp(){
+  ACC.gen++;
   const r = ACC.run; if (!r) return;
   ACC.run = null; r.live.stop();
 }
 function accNow(){ return ACC.run && S.ctx ? S.ctx.currentTime - ACC.run.T0 : null; }
-/* called every frame: the piece is over → let the owner (practice or recording) finish */
+/* called every frame: the piece is over → let the owner (practice or recording) finish; it may ask to be
+   called again (returns false) when it cannot act yet */
 function accompTick(){
   const r = ACC.run; if (!r || r.ended) return;
-  if (accNow() > r.plan.end + 2.5) { r.ended = true; if (r.onEnd) r.onEnd(); }
+  if (accNow() > r.plan.end + 2.5) { r.ended = true; if (r.onEnd && r.onEnd() === false) r.ended = false; }
 }
 
 /* ---- offline: the piano of a recorded take, rendered to sit under it (export, playback, video) ---- */
 /* Rendered in 20-second pieces, three at a time, then added together: a single OfflineAudioContext holding
    every note of a five-minute piece slows down with the square of its length (all nodes exist from the start). */
 async function renderPiano(events, sr, frames, at, onProgress){
-  await loadPiano();
+  await loadPiano(events);
   const SEG = 20, TAIL = 11, dur = frames / sr, out = [new Float32Array(frames), new Float32Array(frames)];
   const segs = []; for (let a = 0; a < dur; a += SEG) segs.push(a);
   let done = 0;
@@ -6648,34 +6766,23 @@ async function renderPiano(events, sr, frames, at, onProgress){
     done++; if (onProgress) onProgress(done / segs.length);
   };
   for (let k = 0; k < segs.length; k += 3) await Promise.all(segs.slice(k, k + 3).map(one));
-  const res = new AudioBuffer({ numberOfChannels: 2, length: Math.max(1, frames), sampleRate: sr });
-  res.copyToChannel(out[0], 0); res.copyToChannel(out[1], 1);
-  return res;
+  return out;                                     // [left, right] (no AudioBuffer copy: a 5-minute piece is ~115 MB)
 }
 /* where accompaniment time 0 sits in a take (seconds into the recording) */
 function accAt(t){ const a = t.acc; return -(a.offsetSec ?? ((t.firstFrame == null ? 0 : t.firstFrame / t.sr) - a.Tz - a.L)); }
+/* the piano for the trimmed part of a take, rendered when a file or video is made and not kept afterwards */
 async function takePiano(t){
-  if (t._piano && t._piano.sampleRate === t.sr && t._piano.length === t.frames) return t._piano;
-  if (!t._pianoP) t._pianoP = renderPiano(t.acc.events, t.sr, t.frames, accAt(t), f => setStatus(t, `피아노 반주 만드는 중 ${Math.round(f * 100)}%`))
-    .then(b => { t._piano = b; return b; }).finally(() => { t._pianoP = null; });
-  return t._pianoP;
+  const a0 = t.trim.start, frames = Math.max(1, t.trim.end - t.trim.start);
+  try { return await renderPiano(t.acc.events, t.sr, frames, accAt(t) - a0 / t.sr, f => setStatus(t, `피아노 반주 만드는 중 ${Math.round(f * 100)}%`)); }
+  finally { setStatus(t, ""); }
 }
-/* how loud the piano goes under the cello: its loudness set relative to the cello's (default 4 dB below) */
-async function pianoGainDb(t){
-  const p = await takePiano(t);
-  if (t._pianoI === undefined) {
-    const chans = [p.getChannelData(0).slice(), p.getChannelData(1).slice()];
-    const d = await DSP.call({ cmd: "measure", fs: t.sr, chans: chans.map(c => c.buffer) }, chans.map(c => c.buffer));
-    t._pianoI = d.I;
-  }
-  return pianoGainNow(t);
-}
-/* the same without waiting for the rendering (live playback): until the piano has been measured, assume the
-   level a typical accompaniment renders at (about −24 LUFS) */
+/* the cello's own loudness (from its analysis, mono, as heard on two speakers), even after a mixed export */
+function celloLoud(t){ const I = t.celloI ?? (t.analysis && t.analysis.I); return isFinite(I) ? I : -30; }
+/* the piano's gain under the cello for live playback: its loudness set relative to the cello's (default 4 dB
+   below). The level is measured when the first file is made; until then a typical value (about −24 LUFS). */
 function pianoGainNow(t){
-  const celloI = t.analysis && isFinite(t.analysis.I) ? t.analysis.I - 3.0103 : -30;
-  const pI = isFinite(t._pianoI) ? t._pianoI : -24;
-  return celloI + (t.accVol ?? -4) - pI;
+  const pI = isFinite(t._pianoI) ? t._pianoI : (isFinite(t.pianoI) ? t.pianoI : -24);
+  return celloLoud(t) - 3.0103 + (t.accVol ?? -4) - pI;
 }
 
 /* ===================== performance view (live, one-line score) ===================== */
