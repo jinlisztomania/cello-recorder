@@ -527,7 +527,7 @@ html.stage-on, html.stage-on body{overflow:hidden}
       <li><b>아이폰</b>은 USB 전원이 부족할 수 있습니다. 소리가 끊기면 전원을 같이 꽂는 USB-C 허브를 쓰세요.</li>
     </ul>
   </details>
-  <p class="ver">앱 버전 <b>2026.10.13-1730</b> · 업데이트 후 이 숫자가 바뀌었는지로 새 버전을 확인할 수 있어요</p>
+  <p class="ver">앱 버전 <b>2026.10.13-1746</b> · 업데이트 후 이 숫자가 바뀌었는지로 새 버전을 확인할 수 있어요</p>
 </main>
 <div id="stage" hidden role="dialog" aria-label="연주 화면">
   <div class="st-top">
@@ -3945,13 +3945,18 @@ function updateDeviceUI(){
 }
 function nt1Option(){ return [...$("#devSel").options].find(o => o.value && /r[øo]de|nt1/i.test(o.textContent)); }
 /* make sure a microphone is live before recording, preferring the NT1 and warning on the built-in mic */
-async function ensureInput(){
+/* purpose "practice": the microphone is only for following and marks, so going without it is fine */
+async function ensureInput(purpose){
+  const practice = purpose === "practice";
   if (!S.stream) await connect();
-  if (!S.stream) { $("#devMore").hidden = false; return false; }
+  if (!S.stream) { if (!practice) $("#devMore").hidden = false; return false; }
   let d = curDevice();
   if (d && d.kind !== "nt1") { const o = nt1Option(); if (o) { await connect(o.value); d = curDevice(); } }
   if (d && d.kind === "builtin" && !S.builtinOk) {
-    if (!confirm(`지금 입력은 내장 마이크(${d.label || "알 수 없음"})예요. NT1이 아닙니다.\n\nNT1이 꽂혀 있는데 이렇게 나온다면 케이블이나 전원을 확인하세요.\n\n그래도 내장 마이크로 녹음할까요?`)) return false;
+    const msg = practice
+      ? `NT1이 연결되어 있지 않아요 (지금 입력: 내장 마이크).\n\n내장 마이크로 음을 들으며 악보와 음정을 표시할까요?\n(이어폰을 써야 피아노 소리가 섞이지 않아요)\n\n‘취소’를 누르면 마이크 없이 연습해요.`
+      : `지금 입력은 내장 마이크(${d.label || "알 수 없음"})예요. NT1이 아닙니다.\n\nNT1이 꽂혀 있는데 이렇게 나온다면 케이블이나 전원을 확인하세요.\n\n그래도 내장 마이크로 녹음할까요?`;
+    if (!confirm(msg)) { if (practice) release(); return false; }
     S.builtinOk = true;
   }
   return true;
@@ -5389,7 +5394,7 @@ function scoreCtxUI(){
   $("#scoreBody").hidden = !SV.rec; $("#scoreEmpty").hidden = !!SV.rec;
   const pb = $("#practiceBtn"); pb.textContent = SV.practice ? "연습 끝" : "연습 시작"; pb.classList.toggle("on", SV.practice);
   if (SV.rec) $("#scoreHint").textContent = song ? "메트로놈 박자에 맞춰 커서가 움직입니다."
-    : SV.practice ? (acc ? "연습 중 · 녹음되지 않아요. 준비 박 뒤에 피아노가 시작하고, 악보는 반주 박자로 넘어갑니다."
+    : SV.practice ? (acc ? `연습 중 · 녹음되지 않아요. 준비 박 뒤에 피아노가 시작하고, 악보는 반주 박자로 넘어갑니다.${S.stream ? "" : " 마이크 없이 연습 중이라 음정 표시는 꺼져 있어요."}`
                          : `연습 중 · 녹음되지 않아요. 연주하면 악보가 따라갑니다${SV.showMarks ? " · 다른 음은 빨강, 음정은 ±" + TUNE_CENTS + "¢ 넘으면 표시" : ""}.`)
     : acc ? "피아노 반주에 맞춰 연주해요. ‘연습 시작’이나 녹음 버튼을 누르면 한 마디 준비 박 뒤에 반주가 시작됩니다."
     : "‘연습 시작’은 녹음 없이 악보를 따라가며 음정을 확인해요. 녹음할 때도 악보가 따라갑니다.";
@@ -5715,7 +5720,9 @@ async function setPractice(on){
   const my = SV.pracGen = (SV.pracGen || 0) + 1;            // a later tap (on or off) wins over one still starting
   if (on) {
     if (S.rec || !SV.rec || SV.ctx !== "quick") return;
-    if (!(await ensureInput()) || my !== SV.pracGen) return;
+    // with the piano, practice works without a microphone too (then no following of the playing, no marks)
+    const acc = accMode(), mic = await ensureInput(acc ? "practice" : undefined);
+    if (my !== SV.pracGen || (!mic && !acc)) return;
     SV.practice = true; lockScreen("practice"); stopPlay();
     gotoStep(firstStepOfMeasure(SV.start), true);
     ensureLiveFollow(); resetFollowers();
@@ -6800,7 +6807,7 @@ async function openStage(){
   $("#stTitle").textContent = stageCtx() === "song" ? S.song.name : (SV.meta && SV.meta.title || SV.rec.name);
   renderStageParts();
   await rebuildStage();
-  if (stageCtx() === "quick") { if (!S.stream) await ensureInput(); ensureLiveFollow(); }   // the performance view always listens
+  if (stageCtx() === "quick") { if (!S.stream) await ensureInput("practice"); ensureLiveFollow(); }   // the performance view listens (when there is a microphone)
 }
 function closeStage(){
   STG.open = false; $("#stage").hidden = true; document.documentElement.classList.remove("stage-on");
@@ -6885,7 +6892,7 @@ function stageTick(now){
   }
   let t = 0;
   if (rec) t = songRec ? S.ctx.currentTime - S.rec.Tz : S.rec.t.frames / S.rec.t.sr;
-  const practising = !rec && !!SV.live;
+  const practising = !rec && (!!SV.live || SV.practice);
   setText($("#stRec"), rec ? (songRec && t < 0 ? `준비 ${Math.ceil(-t / beatDur(S.song))}` : `녹음 중 ${fmtTime(Math.max(0, t), false)}`) : practising ? (ACC.run ? "반주 연습 중 · 녹음 안 됨" : "연습 중 · 녹음 안 됨") : "");
   if (STG.prac !== practising) { STG.prac = practising; $("#stRec").classList.toggle("practice", practising); }
   const ac = ACC.run ? accClock() : null;
