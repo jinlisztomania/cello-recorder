@@ -280,7 +280,7 @@ html.stage-on, html.stage-on body{overflow:hidden}
 #stage.is-rec::after{border-width:7px;animation:stpulse 1.2s ease-in-out infinite}
 @keyframes stpulse{0%,100%{opacity:1}50%{opacity:.35}}
 .st-top{display:flex;align-items:center;gap:10px;min-width:0}
-.st-btn{background:#fff;color:#1c2421;border:1px solid #d3dad7;padding:7px 12px;font-size:.9rem}
+.st-btn{background:#fff;color:#1c2421;border:1px solid #d3dad7;padding:7px 12px;font-size:.9rem;white-space:nowrap;flex:0 0 auto}
 .st-title{display:flex;flex-direction:column;min-width:0;flex:1 1 auto;line-height:1.25}
 .st-title b{font-size:1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .st-title span{font-family:var(--f-mono);font-size:.82rem;color:#5a6863}
@@ -291,6 +291,9 @@ html.stage-on, html.stage-on body{overflow:hidden}
 #stTuner{font-family:var(--f-mono);font-size:.95rem;min-width:5.5em;text-align:right;color:#5a6863}
 #stTuner.ok{color:#2a6b5f} #stTuner.off{color:#9a5b00}
 #stPart{background:#fff;color:#1c2421;border:1px solid #d3dad7;max-width:9em}
+.st-prac{font-weight:700;white-space:nowrap}
+.st-prac.on{background:#2a6b5f;border-color:#2a6b5f;color:#fff}
+.st-prac:disabled{opacity:.4}
 .st-recbtn{width:52px;height:52px;border-radius:50%;padding:0;display:grid;place-items:center;background:#fff;border:3px solid #d3dad7;flex:0 0 auto}
 .st-recbtn span{width:26px;height:26px;border-radius:50%;background:#d4392e;transition:border-radius .2s,width .2s,height .2s}
 .st-recbtn.on{border-color:#d4392e}
@@ -530,6 +533,7 @@ html.stage-on, html.stage-on body{overflow:hidden}
     <span id="stRec" class="st-rec"></span>
     <span id="stTuner"></span>
     <select id="stPart" aria-label="녹음할 파트" hidden></select>
+    <button id="stPracBtn" class="st-btn st-prac">연습</button>
     <button id="stRecBtn" class="st-recbtn" aria-label="녹음 시작"><span></span></button>
   </div>
   <div class="st-score"><canvas id="stCanvas"></canvas><div id="stCount" class="st-count"></div></div>
@@ -5628,7 +5632,9 @@ function computeDeviation(f){
   if (!f || f.midi === null || f.conf < 0.8 || f.db < -70 || !SV.steps.length) return null;
   const cand = [], where = new Map(); const cur = SV.steps[SV.idx];
   if (cur) cur.notes.forEach((x, q) => { cand.push(x); where.set(x, [SV.idx, q]); });
-  for (let j = Math.max(0, SV.idx + 1); j < SV.steps.length && j <= SV.idx + 4; j++) if (SV.steps[j].notes.length) { SV.steps[j].notes.forEach((x, q) => { cand.push(x); where.set(x, [j, q]); }); break; }
+  // following the player, the cursor waits on the last note, so the next one counts too; with the piano the
+  // cursor is on time, so only the note due now (nothing during the piano's bars alone)
+  if (!ACC.run) for (let j = Math.max(0, SV.idx + 1); j < SV.steps.length && j <= SV.idx + 4; j++) if (SV.steps[j].notes.length) { SV.steps[j].notes.forEach((x, q) => { cand.push(x); where.set(x, [j, q]); }); break; }
   // octave-equivalent: pitch detection on a cello (double stops, low strings) often lands an octave off
   let n = null, best = 1e9, dev = 0;
   for (const c of cand) { const d = f.midi - (c.halfTone + 12), fold = ((d + 6) % 12 + 12) % 12 - 6; if (Math.abs(fold) < best) { best = Math.abs(fold); n = c; dev = fold; } }
@@ -6693,7 +6699,8 @@ function closeStage(){
   STG.open = false; $("#stage").hidden = true; document.documentElement.classList.remove("stage-on");
   STG.building = null;
   if (STG.s) { disposeStrip(STG.s); STG.s = null; }
-  STG.size = ""; STG.c = null; STG.rec = null;
+  STG.size = ""; STG.c = null; STG.rec = null; STG.prk = null;
+  if (SV.practice) setPractice(false);
   unlockScreen("stage");
   ensureLiveFollow();
 }
@@ -6758,6 +6765,12 @@ function stageTick(now){
   const dt = Math.min(0.1, (now - (STG.last || now)) / 1000); STG.last = now;
   // recording state and clock (the DOM is touched only when something changes)
   const rec = !!S.rec, songRec = rec && S.rec.song;
+  const pk = (stageCtx() === "song" ? "s" : "q") + (SV.practice ? 1 : 0) + (rec ? 1 : 0) + (accMode() ? "a" : "");
+  if (STG.prk !== pk) {
+    STG.prk = pk; const b = $("#stPracBtn");
+    b.hidden = stageCtx() === "song"; b.disabled = rec; b.classList.toggle("on", SV.practice);
+    b.textContent = SV.practice ? "연습 끝" : accMode() ? "▶ 반주로 연습" : "▶ 연습";
+  }
   if (STG.rec !== rec) {
     STG.rec = rec;
     $("#stage").classList.toggle("is-rec", rec); $("#stRecBtn").classList.toggle("on", rec);
@@ -6822,6 +6835,8 @@ function initStage(){
   $("#stageBtn").addEventListener("click", openStage);
   $("#stClose").addEventListener("click", () => { if (S.rec) { showErr("녹음을 멈춘 뒤 닫으세요."); return; } closeStage(); });
   $("#stRecBtn").addEventListener("click", stageRecord);
+  // practice from the performance view: from the start bar, marks cleared; with the piano, after the count-in
+  $("#stPracBtn").addEventListener("click", () => { if (!S.rec) setPractice(!SV.practice); });
   $("#stPart").addEventListener("change", e => { STG.partId = e.target.value; });
   let rz;
   const again = () => { clearTimeout(rz); rz = setTimeout(() => { if (STG.open) rebuildStage(); }, 250); };
