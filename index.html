@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' blob: data:; worker-src blob:; style-src 'unsafe-inline'; img-src 'self' data: blob:; media-src data: blob:; font-src data:; connect-src blob: data:; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' blob: data:; worker-src 'self' blob:; style-src 'unsafe-inline'; img-src 'self' data: blob:; media-src data: blob:; font-src data:; connect-src blob: data:; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="NT1 녹음">
@@ -224,7 +224,7 @@ details.more[open]>summary{margin-bottom:8px}
 .scoreopts{display:grid;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:2px 12px}
 .optrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:.92rem}
 .optrow:first-child{border-top:0}
-.optrow select{max-width:62%}
+.optrow select{max-width:62%;flex:0 0 auto}
 .optrow input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);margin:0;flex:0 0 auto}
 .optrow.end{justify-content:flex-end}
 .moderow{display:grid;gap:8px}
@@ -261,7 +261,8 @@ details.place p{margin-top:6px}
 .tuner.ok{color:var(--accent)} .tuner.off{color:var(--warn)}
 .spos{font-family:var(--f-mono);font-size:.85rem;color:var(--muted);flex:1 1 auto}
 .startctl{display:inline-flex;gap:4px;align-items:center;font-size:.82rem;color:var(--muted)}
-.startctl button{padding:4px 9px}
+.startctl>span{min-width:5.4em;text-align:center}
+.startctl button{padding:4px 9px;touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .lane-more .sl select{width:100%}
 .markinfo{display:inline-flex;gap:6px;align-items:center;font-size:.82rem;color:var(--muted)}
 #markInfo:not(:empty)::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#d4392e;margin-right:6px;box-shadow:12px 0 0 #e08a00;margin-right:18px}
@@ -372,12 +373,16 @@ html.stage-on, html.stage-on body{overflow:hidden}
         <div class="seg" role="group" aria-label="연주 방식"><button id="modeFollow" aria-pressed="true">내 연주 따라가기</button><button id="modeAcc" aria-pressed="false">피아노 반주 듣기</button></div>
         <div class="accctl" id="accCtl" hidden><span>빠르기</span><button class="small" id="spdDown" aria-label="느리게">−</button><b id="spdLbl">♩=96</b><button class="small" id="spdUp" aria-label="빠르게">+</button></div>
         <p class="hint" id="accHint" hidden>반주는 꼭 이어폰으로 들으세요. 스피커로 틀면 녹음에 피아노가 섞여요.</p>
+        <p class="hint" id="repHint" hidden>이 악보에는 도돌이표가 있어요. 반주는 반복 없이 적힌 순서대로 한 번만 연주돼요.</p>
       </div>
       <div class="scoreopts" id="scoreOpts" hidden>
         <div class="optrow"><label for="scorePart">파트</label><select id="scorePart"></select></div>
         <div class="optrow" id="startCtl"><span>시작 마디</span><span class="startctl"><button class="small" id="startPrev" aria-label="시작 마디 앞으로">◀</button><span id="startLbl">1마디</span><button class="small" id="startNext" aria-label="시작 마디 뒤로">▶</button></span></div>
+        <div class="optrow" id="endCtl"><span>끝 마디<small>◀ ▶ 길게 누르면 빨리</small></span><span class="startctl"><button class="small" id="endPrev" aria-label="끝 마디 앞으로">◀</button><span id="endLbl">끝까지</span><button class="small" id="endNext" aria-label="끝 마디 뒤로">▶</button></span></div>
+        <label class="optrow" id="loopL"><span>구간 반복<small>연습할 때 끝 마디 다음에 처음으로</small></span><input type="checkbox" id="loopTog"></label>
         <label class="optrow" id="marksL"><span>틀린 음·음정 표시<small>악보 · 연주 화면 · 악보 영상 모두</small></span><input type="checkbox" id="marksTog"></label>
         <div class="optrow" id="tolRow"><label for="tolSel">음정 기준</label><select id="tolSel"><option value="15">엄격 ±15¢</option><option value="25">보통 ±25¢</option><option value="40">느슨 ±40¢</option></select></div>
+        <label class="optrow" id="refRow"><span>기준음 A<small>음정 표시와 피아노에 함께 적용</small></span><select id="refSel"><option value="440">440 Hz</option><option value="441">441 Hz</option><option value="442">442 Hz</option><option value="443">443 Hz</option></select></label>
         <label class="optrow" id="followL"><span>녹음할 때 악보 따라가기</span><input type="checkbox" id="followTog"></label>
         <div class="optrow" id="calRow"><span>블루투스 이어폰 지연 맞추기<small id="calStatus2">한 번 해 두면 반주와 녹음이 딱 맞아요</small></span><button class="small" id="calStart2">맞추기</button></div>
         <div class="optrow end" id="delRow"><button class="small danger" id="scoreDel">이 악보 지우기</button></div>
@@ -520,14 +525,15 @@ html.stage-on, html.stage-on body{overflow:hidden}
       <li><b>여러 파트 녹음</b>: 녹음은 준비 박 동안에도 이미 시작되어 있어서 못갖춘마디나 살짝 일찍 들어간 활도 잘리지 않습니다. 같은 파트를 다시 녹음하면 테이크가 쌓이고, ‹ › 로 고른 테이크가 합주에 들어갑니다.</li>
       <li><b>이어폰 맞추기</b>는 에어팟을 다시 연결했거나 다른 이어폰으로 바꿨을 때 한 번 더 해 주세요. 파트가 살짝 어긋나 들리면 파트의 ‘⋯’에서 타이밍을 밀고 당길 수 있습니다.</li>
       <li><b>아이패드 스피커로 녹음하면</b> 메트로놈과 다른 파트 소리가 마이크에 같이 들어갑니다. 여러 파트 녹음은 이어폰으로 하세요.</li>
-      <li><b>악보</b>: MusicXML(.musicxml · .xml · .mxl)을 열면 첼로 파트를 골라 보여 줍니다. 빠른 녹음에서는 들리는 음을 따라가고, 틀린 음이 하나 나와도 제자리를 지키다가 다음 맞는 음에서 따라붙습니다. ◀ ▶로 시작 마디를 고르면 그 마디부터 따라갑니다. 여러 파트 녹음에서는 메트로놈 박자에 맞춰 정확히 움직이고, 파트의 ‘⋯’에서 녹음할 때 보여 줄 악보 파트를 정할 수 있어요. 도돌이표는 펼치지 않고 적힌 순서대로 따라갑니다.</li>
-      <li><b>피아노 반주</b>: 악보에 첼로 말고 다른 파트가 있으면 ‘피아노 반주 듣기’를 고를 수 있어요. 한 마디 준비 박 뒤에 피아노가 악보대로 연주하고, 악보는 반주 박자로 넘어갑니다. 녹음하면 곡 끝에서 저절로 멈추고, 테이크마다 반주를 넣을지와 크기를 고를 수 있어요. 반주는 꼭 이어폰으로 들으세요. 블루투스 이어폰이면 ‘악보 설정 → 지연 맞추기’를 한 번 해 두세요.</li>
+      <li><b>악보</b>: MusicXML(.musicxml · .xml · .mxl)을 열면 첼로 파트를 골라 보여 줍니다. 빠른 녹음에서는 들리는 음을 따라가고, 틀린 음이 하나 나와도 제자리를 지키다가 다음 맞는 음에서 따라붙습니다. ‘악보 설정’에서 시작 마디와 끝 마디를 고르고 ‘구간 반복’을 켜면 그 구간만 되풀이해 연습할 수 있어요. 여러 파트 녹음에서는 메트로놈 박자에 맞춰 정확히 움직이고, 파트의 ‘⋯’에서 녹음할 때 보여 줄 악보 파트를 정할 수 있어요. 도돌이표는 펼치지 않고 적힌 순서대로 따라갑니다.</li>
+      <li><b>피아노 반주</b>: 악보에 첼로 말고 다른 파트가 있으면 ‘피아노 반주 듣기’를 고를 수 있어요. 한 마디 준비 박 뒤에 피아노가 악보대로 연주하고, 악보는 반주 박자로 넘어갑니다. 녹음하면 곡 끝(끝 마디를 정했으면 그 마디)에서 저절로 멈추고, 테이크마다 반주를 넣을지와 크기를 고를 수 있어요. 반주는 꼭 이어폰으로 들으세요. 블루투스 이어폰이면 ‘악보 설정 → 지연 맞추기’를 한 번 해 두세요. 도돌이표가 있는 악보는 반복 없이 적힌 순서대로 한 번만 연주돼요. 피아노가 442 Hz에 맞춰진 곳에서 연습한다면 ‘악보 설정 → 기준음 A’를 바꾸세요.</li>
       <li><b>만든 것들</b>: 피아노 음원은 Salamander Grand Piano V3 (Alexander Holm, CC BY 3.0, 일부 음만 골라 MP3로 줄임). 악보 표시는 OpenSheetMusicDisplay (BSD-3), MP3 인코딩은 lamejs (LGPL), 영상은 mp4-muxer (MIT). 기본 악보는 저작권이 끝난 작품입니다.</li>
       <li><b>“원본 0 dBFS 초과 값: 감지됨”</b>이 뜨면 32-bit float 신호가 브라우저까지 그대로 들어온다는 뜻입니다.</li>
+      <li><b>인터넷 없이</b>: 한 번 열어 두면 연습실처럼 신호가 약한 곳에서도 열려요. 새 버전은 인터넷이 될 때 자동으로 받아요. 녹음과 악보는 처음부터 이 기기 안에만 있어요.</li>
       <li><b>아이폰</b>은 USB 전원이 부족할 수 있습니다. 소리가 끊기면 전원을 같이 꽂는 USB-C 허브를 쓰세요.</li>
     </ul>
   </details>
-  <p class="ver">앱 버전 <b>2026.10.13-1746</b> · 업데이트 후 이 숫자가 바뀌었는지로 새 버전을 확인할 수 있어요</p>
+  <p class="ver">앱 버전 <b>2026.10.13-2015</b> · 업데이트 후 이 숫자가 바뀌었는지로 새 버전을 확인할 수 있어요</p>
 </main>
 <div id="stage" hidden role="dialog" aria-label="연주 화면">
   <div class="st-top">
@@ -2769,6 +2775,8 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
 var Pitch = (function () {
   "use strict";
   var DS = 4;                       // decimate to ~12 kHz: plenty for cello fundamentals (65 Hz – 1.3 kHz)
+  var REF = 440;                    // the A everyone tunes to (440, or 442 with many orchestras and pianos)
+  function setRef(hz) { hz = +hz; REF = hz >= 430 && hz <= 450 ? hz : 440; }
 
   function lp(fs, fc) {             // RBJ low-pass, Q = 0.707
     var w = 2 * Math.PI * fc / fs, c = Math.cos(w), al = Math.sin(w) / (2 * Math.SQRT1_2), a0 = 1 + al;
@@ -2807,7 +2815,7 @@ var Pitch = (function () {
           f0 = fsd / t; conf = 1 - b;
         }
       }
-      var midi = f0 > 0 ? 69 + 12 * Math.log2(f0 / 440) : null;
+      var midi = f0 > 0 ? 69 + 12 * Math.log2(f0 / REF) : null;
       onFrame({ t: clock / fsd, f0: f0, midi: midi, conf: conf, db: dbv });
     }
     return {
@@ -2952,7 +2960,7 @@ var Pitch = (function () {
   var NAMES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
   function name(m) { return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); }
 
-  return { Tracker: Tracker, trackOffline: trackOffline, Segmenter: Segmenter, Follower: Follower, name: name };
+  return { setRef: setRef, ref: function () { return REF; }, Tracker: Tracker, trackOffline: trackOffline, Segmenter: Segmenter, Follower: Follower, name: name };
 })();
 if (typeof module !== "undefined") module.exports = Pitch;
 
@@ -3432,6 +3440,7 @@ if (typeof self !== "undefined" && typeof self.postMessage === "function" && typ
         var mc = d.chans.map(function (b) { return [new Float32Array(b)]; }), mm = Master.measure(mc, d.fs);
         self.postMessage({ id: id, ok: true, I: mm.I, TP: mm.TP });
       } else if (d.cmd === "pitch") {                 // note events of a recorded take, for following the score
+        Pitch.setRef(d.ref || 440);
         var bl = d.blocks.map(function (b) { return new Float32Array(b); }), ev = [], seg = Pitch.Segmenter(function (x) { ev.push(x); });
         Pitch.trackOffline(bl, d.fs, function (f) { prog("pitch", f); }).forEach(seg);
         seg.finish();
@@ -3484,6 +3493,8 @@ if (typeof module !== "undefined") module.exports = Master;
 var Pitch = (function () {
   "use strict";
   var DS = 4;                       // decimate to ~12 kHz: plenty for cello fundamentals (65 Hz – 1.3 kHz)
+  var REF = 440;                    // the A everyone tunes to (440, or 442 with many orchestras and pianos)
+  function setRef(hz) { hz = +hz; REF = hz >= 430 && hz <= 450 ? hz : 440; }
 
   function lp(fs, fc) {             // RBJ low-pass, Q = 0.707
     var w = 2 * Math.PI * fc / fs, c = Math.cos(w), al = Math.sin(w) / (2 * Math.SQRT1_2), a0 = 1 + al;
@@ -3522,7 +3533,7 @@ var Pitch = (function () {
           f0 = fsd / t; conf = 1 - b;
         }
       }
-      var midi = f0 > 0 ? 69 + 12 * Math.log2(f0 / 440) : null;
+      var midi = f0 > 0 ? 69 + 12 * Math.log2(f0 / REF) : null;
       onFrame({ t: clock / fsd, f0: f0, midi: midi, conf: conf, db: dbv });
     }
     return {
@@ -3667,7 +3678,7 @@ var Pitch = (function () {
   var NAMES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
   function name(m) { return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); }
 
-  return { Tracker: Tracker, trackOffline: trackOffline, Segmenter: Segmenter, Follower: Follower, name: name };
+  return { setRef: setRef, ref: function () { return REF; }, Tracker: Tracker, trackOffline: trackOffline, Segmenter: Segmenter, Follower: Follower, name: name };
 })();
 if (typeof module !== "undefined") module.exports = Pitch;
 
@@ -4164,7 +4175,7 @@ async function quickRecToggleInner(){
       if (!run) throw new Error("반주가 시작되지 않았습니다");
       if (S.rec && S.rec.t === t) {
         t.acc = { scoreId: owner.scoreId, scoreName: SV.rec.name, inst: owner.inst, start: SV.start, speed: SV.rec.speed || 1,
-                  Tz: run.T0, L: latencyMs().ms / 1000, events: plan.events, tmap: plan.tmap, end: plan.end, startTs: plan.startTs };
+                  Tz: run.T0, L: latencyMs().ms / 1000, events: plan.events, tmap: plan.tmap, end: plan.end, startTs: plan.startTs, endTs: plan.cut ? plan.endTs : null };
         t.accMix = true; t.accVol = -4;
       } else stopAccomp();
     } catch (e) { stopAccomp(); showErr("피아노 반주를 시작하지 못했습니다. 첼로만 녹음됩니다: " + (e && e.message || e)); }
@@ -5061,7 +5072,7 @@ async function makeBackup(){
       let base = safeName(r.name).slice(0, 60) || "score", fname = `악보/${base}${ext}`, k = 2;
       while (used.has(fname)) fname = `악보/${base} (${k++})${ext}`;
       used.add(fname); entries.push({ name: fname, parts: [u8] });
-      scores.push({ id: r.id, name: r.name, created: r.created, inst: r.inst, start: r.start, acc: r.acc, speed: r.speed, bpm: r.bpm, file: fname });
+      scores.push({ id: r.id, name: r.name, created: r.created, inst: r.inst, start: r.start, end: r.end, loop: r.loop, acc: r.acc, speed: r.speed, bpm: r.bpm, file: fname });
     }
     const lib = {}; for (const x of LIB) { const v = lsGet("nt1-lib-" + x.id, null); if (v) lib[x.id] = v; }      // built-in scores' settings
     const meta = { app: "nt1-float-recorder", v: 1, exported: Date.now(), files, takes, songs: JSON.parse(JSON.stringify(S.songs)), scores, lib };
@@ -5150,11 +5161,19 @@ async function restoreBackup(file){
     for (const sc of meta.scores || []) {
       const e = idx.get(sc.file); if (!e || e.method !== 0 || S.scores.find(x => x.id === sc.id)) continue;
       const data = await file.slice(e.data, e.data + e.size).arrayBuffer();
-      await Store.putScore({ id: sc.id, name: sc.name, created: sc.created, inst: sc.inst, start: sc.start || 0, acc: sc.acc, speed: sc.speed, bpm: sc.bpm, data });
+      await Store.putScore({ id: sc.id, name: sc.name, created: sc.created, inst: sc.inst, start: sc.start || 0, end: sc.end ?? null, loop: !!sc.loop, acc: sc.acc, speed: sc.speed, bpm: sc.bpm, data });
     }
     $("#bkStatus").textContent = `녹음 ${added}개${songs ? ` · 곡 ${songs}개` : ""} 불러옴${skipped ? ` · 이미 있는 ${skipped}개는 건너뜀` : ""} · 다시 여는 중…`;
     setTimeout(() => location.reload(), 900);
   } catch (e) { $("#bkStatus").textContent = ""; showErr("백업을 불러오지 못했습니다: " + (e && e.message || e)); }
+}
+/* opening without a connection: sw.js (next to this page) keeps a copy of the page. It always asks the network
+   first, so a new version shows up as soon as it is online; the copy is used only when the network does not answer */
+function initOffline(){
+  try {
+    if (!("serviceWorker" in navigator) || !window.isSecureContext || location.protocol === "file:") return;
+    navigator.serviceWorker.register("sw.js").catch(() => {});      // not uploaded: the app simply works online only
+  } catch (e) {}
 }
 function initHomeBanner(){
   const standalone = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
@@ -5277,6 +5296,7 @@ async function init(){
   $("#bkSave").addEventListener("click", () => saveFile(bkFile));
   $("#bkLoad").addEventListener("change", e => { restoreBackup(e.target.files[0]); e.target.value = ""; });
   initHomeBanner();
+  initOffline();
   S.songVid = videoUI($("#songVidHost"), "song", () => S.song);
   initStage();
   $("#mShare").addEventListener("click", () => shareFile(mixFile));
@@ -5330,12 +5350,15 @@ const SV = {
   ctx: "quick", rec: null, osmd: null, loadP: null, steps: [], attack: [], idx: -1, cursorAt: 0, pickup: 0, meta: null,
   inst: 0, zoom: lsGet("nt1-zoom", 0.8), start: 0, live: null, takeMap: null, follow: lsGet("nt1-follow", true),
   tunerFrame: null, loadedKey: null, busy: false, tok: 0, marks: new Map(), marksVer: 0, ready: false, loading: null,
-  practice: false, showMarks: lsGet("nt1-marks", true)
+  practice: false, showMarks: lsGet("nt1-marks", true), end: null, loop: false
 };
 let TUNE_CENTS = 25;                   // a note this far from the written pitch (on average) gets a mark
 let FIXED_CENTS = 15;                  // ...unless it settled within this, then it is "corrected"
 function setTolerance(c){ TUNE_CENTS = [15, 25, 40].includes(+c) ? +c : 25; FIXED_CENTS = Math.round(TUNE_CENTS * 0.6); lsSet("nt1-tol", TUNE_CENTS); }
 setTolerance(lsGet("nt1-tol", 25));
+/* the A the cello and the piano are tuned to: intonation marks and the piano both follow it */
+function setRefPitch(hz){ Pitch.setRef(hz); lsSet("nt1-ref", Pitch.ref()); SV.takeMap = null; }
+Pitch.setRef(lsGet("nt1-ref", 440));
 /* colour by how far off: green (in tune) → yellow (25¢) → orange (50¢) → red (a semitone) */
 function sevColor(absCents, alpha){
   const c = Math.max(0, Math.min(100, absCents));
@@ -5369,7 +5392,7 @@ const LIB = (() => {
 function findScore(id){ return id ? (LIB.find(r => r.id === id) || S.scores.find(r => r.id === id) || null) : null; }
 function saveScoreRec(rec){
   if (!rec) return;
-  if (rec.builtin) lsSet("nt1-lib-" + rec.id, { inst: rec.inst, start: rec.start, acc: rec.acc, speed: rec.speed });
+  if (rec.builtin) lsSet("nt1-lib-" + rec.id, { inst: rec.inst, start: rec.start, end: rec.end, loop: rec.loop, acc: rec.acc, speed: rec.speed });
   else Store.putScore(rec).catch(() => {});
 }
 function renderScoreSelect(){
@@ -5382,24 +5405,26 @@ function renderScoreSelect(){
 function scoreCtxUI(){
   const song = SV.ctx === "song";
   // the song tab follows the metronome clock: the listening options belong to the quick tab only
-  for (const id of ["#practiceBtn", "#followL", "#startCtl", "#marksL", "#tolRow", "#tuner"]) $(id).hidden = song;
+  for (const id of ["#practiceBtn", "#followL", "#startCtl", "#endCtl", "#loopL", "#marksL", "#tolRow", "#refRow", "#tuner"]) $(id).hidden = song;
   const acc = accMode();
   $("#modeRow").hidden = song || !SV.rec || !SV.hasAcc;
   $("#modeFollow").classList.toggle("on", !acc); $("#modeAcc").classList.toggle("on", acc);
   $("#modeFollow").setAttribute("aria-pressed", String(!acc)); $("#modeAcc").setAttribute("aria-pressed", String(acc));
-  $("#accCtl").hidden = !acc; $("#accHint").hidden = !acc; $("#calRow").hidden = !acc; $("#followL").hidden = song || acc;
+  $("#accCtl").hidden = !acc; $("#accHint").hidden = !acc; $("#repHint").hidden = !(acc && SV.extras && SV.extras.id === SV.rec.id && SV.extras.rep); $("#calRow").hidden = !acc; $("#followL").hidden = song || acc;
   if (acc) { const b = startBpm(), sp = SV.rec.speed || 1; $("#spdLbl").textContent = `♩=${Math.round(b * sp)}${Math.abs(sp - 1) > 0.001 ? ` (${Math.round(sp * 100)}%)` : ""}`; }
   $("#delRow").hidden = !!(SV.rec && SV.rec.builtin);
   $("#libCredit").textContent = SV.rec && SV.rec.credit ? SV.rec.credit : ""; $("#libCredit").hidden = !(SV.rec && SV.rec.credit);
   $("#scoreBody").hidden = !SV.rec; $("#scoreEmpty").hidden = !!SV.rec;
   const pb = $("#practiceBtn"); pb.textContent = SV.practice ? "연습 끝" : "연습 시작"; pb.classList.toggle("on", SV.practice);
+  const sec = !song && SV.rec && SV.meta && (SV.start > 0 || SV.end != null || SV.loop)
+    ? ` ${barName(SV.start)}~${SV.end == null ? "끝" : barName(SV.end)}${SV.loop ? " 반복" : ""}.` : "";
   if (SV.rec) $("#scoreHint").textContent = song ? "메트로놈 박자에 맞춰 커서가 움직입니다."
-    : SV.practice ? (acc ? `연습 중 · 녹음되지 않아요. 준비 박 뒤에 피아노가 시작하고, 악보는 반주 박자로 넘어갑니다.${S.stream ? "" : " 마이크 없이 연습 중이라 음정 표시는 꺼져 있어요."}`
+    : SV.practice ? (sec ? sec.trim() + " " : "") + (acc ? `연습 중 · 녹음되지 않아요. 준비 박 뒤에 피아노가 시작하고, 악보는 반주 박자로 넘어갑니다.${S.stream ? "" : " 마이크 없이 연습 중이라 음정 표시는 꺼져 있어요."}`
                          : `연습 중 · 녹음되지 않아요. 연주하면 악보가 따라갑니다${SV.showMarks ? " · 다른 음은 빨강, 음정은 ±" + TUNE_CENTS + "¢ 넘으면 표시" : ""}.`)
     : acc ? "피아노 반주에 맞춰 연주해요. ‘연습 시작’이나 녹음 버튼을 누르면 한 마디 준비 박 뒤에 반주가 시작됩니다."
     : "‘연습 시작’은 녹음 없이 악보를 따라가며 음정을 확인해요. 녹음할 때도 악보가 따라갑니다.";
   $("#followTog").checked = SV.follow; $("#marksTog").checked = SV.showMarks;
-  $("#tolSel").value = String(TUNE_CENTS);
+  $("#tolSel").value = String(TUNE_CENTS); $("#refSel").value = String(Pitch.ref()); $("#loopTog").checked = SV.loop;
   if (typeof refreshVideoUI === "function") refreshVideoUI();
 }
 /* put the card in the tab that is showing, and open that context's score */
@@ -5438,9 +5463,9 @@ async function openScore(rec, inst){
       if (tok !== SV.tok) return;
     }
     if (!SV.extras || SV.extras.id !== key) {          // pedal and cresc./dim. for the piano (unpacking a .mxl if need be)
-      const ex = scoreExtras(await scoreText(rec.data));
+      const txt = await scoreText(rec.data), ex = scoreExtras(txt);
       if (tok !== SV.tok) return;
-      SV.extras = { id: key, ex };
+      SV.extras = { id: key, ex, rep: hasRepeats(txt) };
     }
     const names = SV.osmd.Sheet.Instruments.map(i => i.Name || "파트");
     let i = inst;
@@ -5515,7 +5540,11 @@ function setInst(i){
   o.cursor.show();
   SV.idx = -1; SV.cursorAt = 0;
   SV.start = Math.min(SV.start, Math.max(0, SV.meta.measures - 1));
-  if (SV.ctx === "quick" && SV.rec) SV.start = SV.rec.start || 0;
+  if (SV.ctx === "quick" && SV.rec) SV.start = Math.min(SV.rec.start || 0, SV.meta.measures - 1);
+  // the practice section's last bar (none = to the end) and whether it repeats: kept per score
+  const e = SV.ctx === "quick" && SV.rec ? SV.rec.end : null;
+  SV.end = e == null || e >= SV.meta.measures - 1 ? null : Math.max(SV.start, e);
+  SV.loop = SV.ctx === "quick" && !!(SV.rec && SV.rec.loop);
   gotoStep(firstStepOfMeasure(SV.start), true);
   updateStartLbl();
   resetFollowers(true);
@@ -5565,7 +5594,13 @@ function gotoStep(i, force){
   $("#scorePos").textContent = posLabel(i);
 }
 function posLabel(i){ const s = SV.steps[i]; return s ? `${barName(s.m)}${s.midis.length ? " · " + s.midis.map(Pitch.name).join("+") : ""}` : ""; }
-function updateStartLbl(){ if (SV.meta) $("#startLbl").textContent = barName(SV.start); }
+function updateStartLbl(){ if (SV.meta) { $("#startLbl").textContent = barName(SV.start); $("#endLbl").textContent = SV.end == null ? "끝까지" : barName(SV.end); } }
+/* the notes the follower listens for: up to the end of the practice section */
+function secAttack(){
+  if (SV.end == null) return SV.attack;
+  const k = SV.attack.findIndex(a => a.m > SV.end);
+  return k < 0 ? SV.attack : SV.attack.slice(0, k);
+}
 function startAttackIndex(attack, start){ attack = attack || SV.attack; start = start ?? SV.start; const k = attack.findIndex(a => a.m >= start); return k < 0 ? 0 : k; }
 
 /* ---- wrong-note and intonation marks ---- */
@@ -5723,12 +5758,12 @@ async function setPractice(on){
     // with the piano, practice works without a microphone too (then no following of the playing, no marks)
     const acc = accMode(), mic = await ensureInput(acc ? "practice" : undefined);
     if (my !== SV.pracGen || (!mic && !acc)) return;
-    SV.practice = true; lockScreen("practice"); stopPlay();
+    SV.practice = true; SV.passSeen = 0; SV.passClear = false; lockScreen("practice"); stopPlay();
     gotoStep(firstStepOfMeasure(SV.start), true);
     ensureLiveFollow(); resetFollowers();
     if (accMode()) {
       scoreCtxUI(); $("#scoreHint").textContent = "피아노 준비 중…";
-      try { await startAccomp(currentPlan(), () => setPractice(false), { scoreId: SV.rec.id, inst: SV.inst }); }
+      try { await startAccomp(currentPlan(), () => setPractice(false), { scoreId: SV.rec.id, inst: SV.inst, loop: () => SV.practice && SV.loop }); }
       catch (e) { showErr("반주를 시작하지 못했습니다: " + (e && e.message || e)); return setPractice(false); }
       if ((my !== SV.pracGen || !SV.practice) && ACC.run && !S.rec) stopAccomp();   // stopped again while the piano was loading
     }
@@ -5738,13 +5773,14 @@ async function setPractice(on){
 /* accompaniment: available when the score has other parts; chosen per score */
 function accMode(){ return SV.ctx === "quick" && !!SV.rec && SV.ready && SV.hasAcc && !!SV.rec.acc; }
 function startBpm(){ return SV.osmd ? measureBpms(SV.osmd.Sheet, SV.rec && SV.rec.bpm)[SV.start] || 80 : 80; }
-function currentPlan(){ return accompPlan(SV.osmd, SV.inst, SV.start, SV.rec.speed || 1, SV.rec.bpm, SV.extras && SV.extras.id === SV.rec.id ? SV.extras.ex : null); }
+function currentPlan(){ return accompPlan(SV.osmd, SV.inst, SV.start, SV.rec.speed || 1, SV.rec.bpm, SV.extras && SV.extras.id === SV.rec.id ? SV.extras.ex : null, { end: SV.end, ref: Pitch.ref() }); }
 function setAccMode(on){
   if (!SV.rec || S.rec) return;
   if (SV.practice) setPractice(false);
   SV.rec.acc = !!on; saveScoreRec(SV.rec);
-  if (on) { try { loadPiano(currentPlan().events).catch(e => showErr("피아노 음원을 불러오지 못했습니다: " + (e && e.message || e))); } catch (e) {} }
   scoreCtxUI();
+  // the samples this piece needs, decoded in the background once the switch has been drawn
+  if (on) setTimeout(() => { if (!accMode()) return; try { loadPiano(currentPlan().events).catch(e => showErr("피아노 음원을 불러오지 못했습니다: " + (e && e.message || e))); } catch (e) {} }, 60);
 }
 function setSpeed(d){
   if (!SV.rec || ACC.run) return;
@@ -5763,16 +5799,16 @@ function accClock(){
 }
 function accClock1(){
   if (SV.ctx !== "quick" || !SV.rec) return null;
-  if (ACC.run) return ACC.run.scoreId === SV.rec.id && ACC.run.inst === SV.inst ? { tmap: ACC.run.plan.tmap, t: accNow(), startTs: ACC.run.plan.startTs, ci: ACC.run.plan.countIn } : null;
+  if (ACC.run) { const p = ACC.run.plan; return ACC.run.scoreId === SV.rec.id && ACC.run.inst === SV.inst ? { tmap: p.tmap, t: accNow(), startTs: p.startTs, ci: p.countIn, endTs: p.cut ? p.endTs - 1e-4 : null, pass: ACC.run.pass } : null; }
   const p = S.player; if (!p || !p.takeId || !S.ctx) return null;
   const tk = S.byId.get(p.takeId);
   if (!tk || !tk.acc || tk.acc.scoreId !== SV.rec.id || tk.acc.inst !== SV.inst) return null;
-  return { tmap: tk.acc.tmap, t: S.ctx.currentTime - p.Tz - accAt(tk), startTs: tk.acc.startTs };
+  return { tmap: tk.acc.tmap, t: S.ctx.currentTime - p.Tz - accAt(tk), startTs: tk.acc.startTs, endTs: tk.acc.endTs != null ? tk.acc.endTs - 1e-4 : null };
 }
-function clockTs(c){ return c.t < 0 ? c.startTs : tfns(c.tmap).tsOf(c.t); }
+function clockTs(c){ return c.t < 0 ? c.startTs : c.endTs != null ? Math.min(c.endTs, tfns(c.tmap).tsOf(c.t)) : tfns(c.tmap).tsOf(c.t); }
 function stepAtTs(steps, ts){ let lo = 0, hi = steps.length - 1, a = 0; while (lo <= hi) { const m = (lo + hi) >> 1; if (steps[m].ts <= ts + 1e-6) { a = m; lo = m + 1; } else hi = m - 1; } return a; }
 function resetFollowers(keepMarks){
-  if (SV.live) SV.live.fol = Pitch.Follower(SV.attack, startAttackIndex());
+  if (SV.live) { SV.live.att = secAttack(); SV.live.fol = Pitch.Follower(SV.live.att, startAttackIndex()); SV.live.armed = false; }
   SV.takeMap = null;
   if (!keepMarks) clearMarks();
 }
@@ -5782,13 +5818,20 @@ function ensureLiveFollow(){
   const want = SV.ctx === "quick" && SV.rec && S.stream && SV.attack.length && (SV.practice || stageOpen || (S.rec && !S.rec.song && SV.follow));
   if (!want) { stopLiveFollow(); return; }
   if (SV.live && SV.live.sr === S.ctx.sampleRate) return;
-  const live = { sr: S.ctx.sampleRate, fol: Pitch.Follower(SV.attack, startAttackIndex()) };
+  const att = secAttack(), live = { sr: S.ctx.sampleRate, att, fol: Pitch.Follower(att, startAttackIndex()), armed: false };
   live.seg = Pitch.Segmenter(e => {
     if (S.player || !SV.ready || SV.live !== live) return;   // (a take playing drives the cursor itself)
     e._a = SV.attack;
+    // practising a section on repeat (no piano): after its last note, a new note starts the next pass
+    if (live.armed) {
+      const lastA = live.att[live.att.length - 1];
+      if (!SV.practice || !SV.loop || ACC.run) live.armed = false;
+      else if (!lastA || !lastA.midis.includes(e.midi)) { live.armed = false; live.fol = Pitch.Follower(live.att, startAttackIndex()); clearMarks(); gotoStep(firstStepOfMeasure(SV.start), true); }
+    }
     const r = live.fol.hear(e.midi);
     applyHeard(r, e);
     if (r.pos >= 0 && SV.attack[r.pos] && !ACC.run) gotoStep(SV.attack[r.pos].i);   // with the piano, the cursor keeps its clock
+    if (SV.practice && SV.loop && !ACC.run && live.att.length && r.matched === live.att.length - 1) live.armed = true;
   }, e => {
     if (S.player || e._k === undefined || e._k < 0 || e._a !== SV.attack) return;   // the note began on another score/part
     const v = noteVerdict(e); if (v) setMark(e._k, v.type, { cents: v.cents });
@@ -5815,16 +5858,19 @@ async function takeScoreMap(t, force, snap){
   // the score as it is now: if the user switches score while the notes are being found, this map stays with the old one
   const sc = snap || { rec: SV.rec, attack: SV.attack, start: SV.start, follow: SV.follow, ctx: SV.ctx };
   if (!sc.rec || sc.ctx !== "quick" || !sc.attack.length) return null;
-  if (!t._events) {
-    if (t.events && t.eventsV === 2) t._events = t.events;
+  const ref = Pitch.ref();
+  if (!t._events || (t._eventsRef || 440) !== ref) {
+    t._events = null;
+    if (t.events && t.eventsV === 2 && (t.eventsRef || 440) === ref) t._events = t.events;
     else {
       const blocks = await Store.getBlocks(t.id);
       setStatus(t, "악보 위치 찾는 중…");
-      const d = await DSP.call({ cmd: "pitch", fs: t.sr, blocks: blocks.map(b => b.buffer) }, blocks.map(b => b.buffer),
+      const d = await DSP.call({ cmd: "pitch", fs: t.sr, ref, blocks: blocks.map(b => b.buffer) }, blocks.map(b => b.buffer),
         (st, f) => setStatus(t, `악보 위치 찾는 중 ${Math.round(f * 100)}%`));
       setStatus(t, "");
-      t._events = d.events; if (d.events.length < 30000) { t.events = d.events; t.eventsV = 2; saveSoon(t); }
+      t._events = d.events; if (d.events.length < 30000) { t.events = d.events; t.eventsV = 2; t.eventsRef = ref; saveSoon(t); }
     }
+    t._eventsRef = ref;
   }
   const fol = Pitch.Follower(sc.attack, startAttackIndex(sc.attack, sc.start)), map = [], marks = [];
   let lw = null;
@@ -5876,6 +5922,11 @@ function scoreTick(){
   if (clk) {
     if (SV.startStepFor !== SV.start + ":" + SV.steps.length) { SV.startStepFor = SV.start + ":" + SV.steps.length; SV.startStep = firstStepOfMeasure(SV.start); }
     gotoStep(Math.max(SV.startStep, stepAtTs(SV.steps, clockTs(clk))));
+    // the piano went round again (a section on repeat): the follower restarts with it; the last pass's marks stay
+    // up during the count-in and are cleared on the downbeat
+    if (clk.pass == null) SV.passClear = false;
+    else if (clk.pass !== SV.passSeen) { SV.passSeen = clk.pass; if (clk.pass > 0) { resetFollowers(true); SV.passClear = true; } }
+    if (SV.passClear && clk.ci && clk.t >= clk.ci.downAt - 0.05) { SV.passClear = false; clearMarks(); }
     const counting = clk.ci && clk.t < clk.ci.downAt;
     if (counting) { setText($("#scorePos"), `준비 ${Math.max(1, Math.ceil((clk.ci.downAt - clk.t) / clk.ci.beatSec))}`); SV.counted = true; }
     else if (SV.counted) { SV.counted = false; setText($("#scorePos"), posLabel(SV.idx)); }
@@ -5899,6 +5950,15 @@ async function importScore(file){
     await Store.putScore(rec); S.scores.unshift(rec);
     selectScoreHere(rec.id, true);
   } catch (e) { showErr("악보를 열지 못했습니다: " + (e && e.message || e)); }
+}
+/* a ◀ ▶ button: one step per tap; held down, it keeps stepping (a long piece has many bars) */
+function holdRepeat(btn, fn){
+  let t1 = 0, t2 = 0, held = false;
+  const stop = () => { clearTimeout(t1); clearInterval(t2); t1 = t2 = 0; };
+  btn.addEventListener("pointerdown", e => { if (e.button) return; held = false; stop(); try { btn.setPointerCapture(e.pointerId); } catch (x) {} t1 = setTimeout(() => { held = true; fn(); t2 = setInterval(fn, 90); }, 450); });
+  for (const ev of ["pointerup", "pointerleave", "pointercancel"]) btn.addEventListener(ev, stop);
+  btn.addEventListener("click", e => { if (held) { held = false; return; } fn(); });
+  btn.addEventListener("contextmenu", e => e.preventDefault());
 }
 /* the score chosen in the current context; in a song with no takes yet, take its tempo and metre */
 function selectScoreHere(id, alreadyOpen){
@@ -5938,12 +5998,22 @@ function initScore(){
   const moveStart = d => {
     if (!SV.meta || ACC.run) return;
     SV.start = Math.max(0, Math.min(SV.meta.measures - 1, SV.start + d));
-    if (SV.rec) { SV.rec.start = SV.start; saveScoreRec(SV.rec); }
+    if (SV.end != null && SV.end < SV.start) SV.end = SV.start;          // the section's end moves along
+    if (SV.rec) { SV.rec.start = SV.start; SV.rec.end = SV.end; saveScoreRec(SV.rec); }
     updateStartLbl(); resetFollowers(); gotoStep(firstStepOfMeasure(SV.start), true); scoreCtxUI();
   };
+  const moveEnd = d => {
+    if (!SV.meta || ACC.run) return;
+    const lastBar = SV.meta.measures - 1, e = Math.max(SV.start, Math.min(lastBar, (SV.end == null ? lastBar : SV.end) + d));
+    SV.end = e >= lastBar ? null : e;
+    if (SV.rec) { SV.rec.end = SV.end; saveScoreRec(SV.rec); }
+    updateStartLbl(); resetFollowers(true); scoreCtxUI();
+  };
   $("#markClear").addEventListener("click", clearMarks);
-  $("#startPrev").addEventListener("click", () => moveStart(-1));
-  $("#startNext").addEventListener("click", () => moveStart(1));
+  holdRepeat($("#startPrev"), () => moveStart(-1)); holdRepeat($("#startNext"), () => moveStart(1));
+  holdRepeat($("#endPrev"), () => moveEnd(-1)); holdRepeat($("#endNext"), () => moveEnd(1));
+  $("#loopTog").addEventListener("change", e => { SV.loop = e.target.checked; if (SV.rec) { SV.rec.loop = SV.loop; saveScoreRec(SV.rec); } if (SV.live) SV.live.armed = false; scoreCtxUI(); });
+  $("#refSel").addEventListener("change", e => { setRefPitch(e.target.value); scoreCtxUI(); });
   $("#followTog").addEventListener("change", e => { SV.follow = e.target.checked; lsSet("nt1-follow", SV.follow); ensureLiveFollow(); });
   $("#practiceBtn").addEventListener("click", () => setPractice(!SV.practice));
   $("#modeFollow").addEventListener("click", () => setAccMode(false));
@@ -6357,7 +6427,7 @@ async function quickVideoJob(t, withMarks, onStage){
   const kf = [];
   if (t.acc) {                      // accompanied: the cursor runs on the piano's clock
     const { timeOf } = timeFns(t.acc.tmap), a0 = accAt(t);
-    for (const st of s.steps) { if (st.ts < t.acc.startTs - 1e-9) continue; const tt = timeOf(st.ts) + a0 - off; if (tt > dur) break; kf.push({ t: Math.max(0, tt), x: st.x }); }
+    for (const st of s.steps) { if (st.ts < t.acc.startTs - 1e-9) continue; if (t.acc.endTs != null && st.ts > t.acc.endTs - 1e-9) break; const tt = timeOf(st.ts) + a0 - off; if (tt > dur) break; kf.push({ t: Math.max(0, tt), x: st.x }); }
   } else for (const e of tm.map) { const tt = e.t - off; if (tt < -0.05 || tt > dur) continue; kf.push({ t: Math.max(0, tt), x: s.steps[e.i].x }); }
   const marks = withMarks && tm ? tm.marks.filter(m => m.type).map(m => ({ t: m.t - off, type: m.type, midi: m.midi, cents: m.cents, from: m.from, step: sc.attack[m.k] ? sc.attack[m.k].i : -1 })).filter(m => m.step >= 0 && m.t <= dur).sort((x, y) => x.t - y.t) : [];
   const d0 = new Date(t.created);
@@ -6482,12 +6552,17 @@ function loadPiano(events){
     const data = pianoData(), ctx = ensureCtx();
     const want = new Set(events ? events.map(e => keyOf(e[2], e[3])) : Object.keys(data));
     const todo = [...want].filter(k => data[k] && !ACC.bufs.has(k));
-    await Promise.all(todo.map(async k => {
-      const bin = atob(data[k]), u8 = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-      const buf = await new Promise((res, rej) => { const p = ctx.decodeAudioData(u8.buffer, res, rej); if (p && p.catch) p.catch(rej); });
-      ACC.bufs.set(k, { buf, off: onsetOf(buf) });
-    }));
+    // three at a time: decoding them all at once starves the page (the screen stutters while it switches mode)
+    let q = 0;
+    const one = async () => {
+      while (q < todo.length) {
+        const k = todo[q++], bin = atob(data[k]), u8 = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        const buf = await new Promise((res, rej) => { const p = ctx.decodeAudioData(u8.buffer, res, rej); if (p && p.catch) p.catch(rej); });
+        ACC.bufs.set(k, { buf, off: onsetOf(buf) });
+      }
+    };
+    await Promise.all([one(), one(), one()]);
     return ACC.bufs;
   });
   ACC.chain = job.catch(() => {});
@@ -6597,8 +6672,14 @@ function scoreExtras(txt){
     });
   } catch (e) { return null; }
 }
-/* everything needed to play (and later re-render) the accompaniment from a start bar, at a speed */
-function accompPlan(osmd, soloInst, startMeasure, speed, fallbackBpm, ex){
+/* repeat signs, voltas, D.C. / D.S.: the piano plays the bars in written order, once, so the user is told */
+function hasRepeats(txt){
+  if (!txt) return false;
+  return /<repeat\b[^>]*direction="backward"|<ending\b|\b(dacapo|dalsegno|tocoda)="|<words\b[^>]*>\s*(D\.\s?[CS]\.|Da\s+Capo|Dal\s+Segno)/i.test(txt);
+}
+/* everything needed to play (and later re-render) the accompaniment from a start bar, at a speed.
+   opt.end: the last bar to play (a practice section; none = to the end) · opt.ref: the A the piano is tuned to */
+function accompPlan(osmd, soloInst, startMeasure, speed, fallbackBpm, ex, opt){
   const sh = osmd.Sheet, sm = sh.SourceMeasures, insts = sh.Instruments;
   const bpms = measureBpms(sh, fallbackBpm), full = [], mrow = [];
   let sec = 0, ritAt = -1;
@@ -6619,6 +6700,9 @@ function accompPlan(osmd, soloInst, startMeasure, speed, fallbackBpm, ex){
   const start = Math.max(0, Math.min(sm.length - 1, startMeasure || 0)), t0 = full[mrow[start]][1];
   const tmap = full.map(r => [r[0], r[1] - t0, r[2], r[3]]);
   const { timeOf } = timeFns(tmap), startTs = full[mrow[start]][0];
+  const last = opt && opt.end != null ? Math.max(start, Math.min(sm.length - 1, opt.end)) : sm.length - 1;
+  const endTs = sm[last].AbsoluteTimestamp.RealValue + sm[last].Duration.RealValue, cut = last < sm.length - 1;
+  const shift = opt && opt.ref ? 12 * Math.log2(opt.ref / 440) : 0;          // re-tuning: a fraction of a semitone
   // dynamics per instrument (a piano's p or f is written once, between or above the staves, for both hands)
   const staves = sh.Staves || [], dyn = new Map();
   sm.forEach((m, mi) => (m.StaffLinkedExpressions || []).forEach((list, si) => (list || []).forEach(e => {
@@ -6658,7 +6742,7 @@ function accompPlan(osmd, soloInst, startMeasure, speed, fallbackBpm, ex){
     const mAbs = m.AbsoluteTimestamp.RealValue;
     for (const c of m.VerticalSourceStaffEntryContainers) {
       const ts = mAbs + c.Timestamp.RealValue;
-      if (ts < startTs - 1e-9) continue;
+      if (ts < startTs - 1e-9 || ts > endTs - 1e-9) continue;
       for (const se of c.StaffEntries) {
         if (!se) continue;
         const ii = insts.indexOf(se.ParentStaff.ParentInstrument); if (ii === soloInst || ii < 0) continue;
@@ -6675,7 +6759,8 @@ function accompPlan(osmd, soloInst, startMeasure, speed, fallbackBpm, ex){
             let d = grace ? 0.1 : timeOf(Math.min(endW, tmap[tmap.length - 1][0] + tmap[tmap.length - 1][3])) - timeOf(ts);
             if (stacc) d *= 0.5;
             if (ferm) d *= 1.8;                                               // a fermata is held
-            events.push([+at.toFixed(4), +d.toFixed(4), n.halfTone + 12, +velAt(ii, ts).toFixed(2)]);
+            if (cut) d = Math.min(d, timeOf(endTs) + 0.25 - at);              // a section ends cleanly on its last bar
+            events.push([+at.toFixed(4), +d.toFixed(4), +(n.halfTone + 12 + shift).toFixed(4), +velAt(ii, ts).toFixed(2)]);
           }
         }
       }
@@ -6688,8 +6773,8 @@ function accompPlan(osmd, soloInst, startMeasure, speed, fallbackBpm, ex){
   const fullLen = i => { const g = sig(i); return g ? g.Numerator / g.Denominator : 1; };
   if (sm[fm] && sm[fm].Duration.RealValue < fullLen(fm) - 1e-6 && fm + 1 < sm.length) fm++;
   const g = sig(fm), beats = g ? g.Numerator : 4, beatSec = tmap[mrow[fm]][2] / (g ? g.Denominator : 4);
-  const end = sec - t0;
-  return { tmap, events, end, startTs, start, countIn: { beats, beatSec, downAt: tmap[mrow[fm]][1] }, speed };
+  const end = cut ? timeOf(endTs) : sec - t0;
+  return { tmap, events, end, startTs, endTs, start, last, cut, countIn: { beats, beatSec, downAt: tmap[mrow[fm]][1] }, speed, ref: (opt && opt.ref) || 440 };
 }
 
 /* ---- live: the piano on a lookahead scheduler. 1.2 s ahead, so a stall of the page (a score redraw on rotation)
@@ -6717,7 +6802,8 @@ function livePiano(events, T0, from, gain, busIn){
   return { bus, stop(){ clearInterval(id); try { bus.gain.cancelScheduledValues(ctx.currentTime); bus.gain.setTargetAtTime(0, ctx.currentTime, 0.03); setTimeout(() => { try { bus.disconnect(); } catch (e) {} }, 400); } catch (e) {} } };
 }
 /* practice / recording: one bar of count-in clicks, then the piano. A newer start or a stop while this one is
-   still loading cancels it (two quick taps must never leave a piano nobody can stop). */
+   still loading cancels it (two quick taps must never leave a piano nobody can stop).
+   owner.loop(): asked as each pass nears its end — true plays the section again, after another bar of count-in */
 async function startAccomp(plan, onEnd, owner){
   stopAccomp();
   const my = ++ACC.gen;
@@ -6725,13 +6811,17 @@ async function startAccomp(plan, onEnd, owner){
   if (my !== ACC.gen) return null;
   const ctx = ensureCtx(); await ctx.resume();
   if (my !== ACC.gen) return null;
-  const ci = plan.countIn, Tclick = ctx.currentTime + 0.35;
-  const T0 = Tclick + ci.beats * ci.beatSec - ci.downAt;           // ctx time of accompaniment time 0
-  const bus = ctx.createGain(); bus.connect(S.bus);
-  for (let k = 0; k < ci.beats; k++) clickTo(bus, Tclick + k * ci.beatSec, k === 0);   // stopped with the piano
-  ACC.run = { plan, T0, live: livePiano(plan.events, T0, -Infinity, 1, bus), onEnd, ended: false,
+  const p = accPass(plan, ctx.currentTime + 0.35);
+  ACC.run = { plan, T0: p.T0, live: p.live, onEnd, ended: false, pass: 0, next: null, old: [], loop: owner && owner.loop,
               scoreId: owner && owner.scoreId, inst: owner && owner.inst };
   return ACC.run;
+}
+/* one pass: count-in clicks from Tclick, then the piano; clicks and piano share a bus, so they stop together */
+function accPass(plan, Tclick){
+  const ctx = S.ctx, ci = plan.countIn, T0 = Tclick + ci.beats * ci.beatSec - ci.downAt;    // ctx time of accompaniment time 0
+  const bus = ctx.createGain(); bus.connect(S.bus);
+  for (let k = 0; k < ci.beats; k++) clickTo(bus, Tclick + k * ci.beatSec, k === 0);
+  return { T0, Tclick, live: livePiano(plan.events, T0, -Infinity, 1, bus) };
 }
 function clickTo(dest, when, accent){
   const ctx = S.ctx, o = ctx.createOscillator(), g = ctx.createGain();
@@ -6744,14 +6834,23 @@ function clickTo(dest, when, accent){
 function stopAccomp(){
   ACC.gen++;
   const r = ACC.run; if (!r) return;
-  ACC.run = null; r.live.stop();
+  ACC.run = null; r.live.stop(); if (r.next) r.next.live.stop(); r.old.forEach(l => l.stop()); r.old = [];
 }
 function accNow(){ return ACC.run && S.ctx ? S.ctx.currentTime - ACC.run.T0 : null; }
-/* called every frame: the piece is over → let the owner (practice or recording) finish; it may ask to be
-   called again (returns false) when it cannot act yet */
+/* called every frame: the piece (or section) is over → let the owner (practice or recording) finish; it may ask
+   to be called again (returns false) when it cannot act yet. On repeat, the next pass is set up a second ahead. */
 function accompTick(){
   const r = ACC.run; if (!r || r.ended) return;
-  if (accNow() > r.plan.end + 2.5) { r.ended = true; if (r.onEnd && r.onEnd() === false) r.ended = false; }
+  const now = accNow(), ct = S.ctx.currentTime, looping = !!(r.loop && r.loop());
+  if (looping && !r.next && now > r.plan.end - 1) r.next = accPass(r.plan, r.T0 + r.plan.end);
+  if (r.next && !looping && ct < r.next.Tclick - 0.05) { r.next.live.stop(); r.next = null; }      // repeat switched off
+  if (r.next && ct >= r.next.Tclick) {
+    const old = r.live; r.old.push(old);
+    setTimeout(() => { old.stop(); r.old = r.old.filter(x => x !== old); }, 600);     // the last notes' release
+    r.T0 = r.next.T0; r.live = r.next.live; r.next = null; r.pass++;
+    return;
+  }
+  if (!r.next && now > r.plan.end + (r.plan.cut ? 1 : 2.5)) { r.ended = true; if (r.onEnd && r.onEnd() === false) r.ended = false; }
 }
 
 /* ---- offline: the piano of a recorded take, rendered to sit under it (export, playback, video) ---- */
